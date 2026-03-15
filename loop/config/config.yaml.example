@@ -41,6 +41,11 @@ notifications:
   slack_webhook: "YOUR_SLACK_WEBHOOK_URL"   # Optional: Slack pings on each cycle
   notify_on: ["harvest", "winner", "deploy", "kill"]
 
+# ── Discord (#creative-signals) ─────────────────────────────────────────────
+discord:
+  webhook_url: "YOUR_DISCORD_WEBHOOK_URL"  # #creative-signals channel webhook
+  channel_id: "1482849535473614848"
+
 # ── Frameworks Path ──────────────────────────────────────────────────────────
 frameworks_path: "../creative"      # Path to creative framework files
 
