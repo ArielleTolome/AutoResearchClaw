@@ -86,6 +86,7 @@ class LLMConfig:
     fallback_models: list[str] = field(
         default_factory=lambda: ["gpt-4.1", "gpt-4o-mini"]
     )
+    api_key_env: str = ""
     max_tokens: int = 4096
     temperature: float = 0.7
     max_retries: int = 3
@@ -691,7 +692,7 @@ class LLMClient:
 
         cmd = [cli_path, "exec", "--json", "-o", out_path]
         if effective_model:
-            cmd += ["-m", effective_model]
+            cmd += ["-c", f"model={effective_model}"]
         cmd += ["-"]  # read prompt from stdin
 
         try:

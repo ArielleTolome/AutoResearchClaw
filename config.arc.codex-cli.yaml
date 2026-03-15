@@ -44,10 +44,10 @@ llm:
   base_url: ""        # not used for codex-cli
   api_key: ""         # not used for codex-cli
   api_key_env: ""     # not used for codex-cli
-  primary_model: "gpt-5.3-codex-spark"
+  primary_model: "gpt-5.4"
   fallback_models:
+    - "gpt-5.3-codex-spark"
     - "gpt-4.1"
-    - "o4-mini"
 
 security:
   hitl_required_stages: [5, 9, 20]

@@ -13,20 +13,41 @@ fi
 
 TOPIC="$1"
 shift
-EXTRA_ARGS="$@"
 
-# Set your API key via environment variable or a local .env file (not committed)
-# export OPENAI_API_KEY="sk-proj-..."
-# Or load from .env: [ -f .env ] && source .env
+# Parse --config and --no-auto-approve from remaining args
+CONFIG="config.arc.yaml"
+AUTO_APPROVE="--auto-approve"
+EXTRA_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config|-c)
+      CONFIG="$2"
+      shift 2
+      ;;
+    --no-auto-approve)
+      AUTO_APPROVE=""
+      shift
+      ;;
+    *)
+      EXTRA_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Load .env if present
+[ -f .env ] && source .env
 
 source .venv/bin/activate
 
 echo "🔬 Starting AutoResearchClaw..."
 echo "📝 Topic: $TOPIC"
+echo "⚙️  Config: $CONFIG"
 echo ""
 
 researchclaw run \
-  --config config.arc.yaml \
+  --config "$CONFIG" \
   --topic "$TOPIC" \
-  --auto-approve \
-  $EXTRA_ARGS
+  $AUTO_APPROVE \
+  "${EXTRA_ARGS[@]}"
