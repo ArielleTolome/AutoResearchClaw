@@ -58,7 +58,8 @@ frameworks_path: "../creative"      # Path to creative framework files
 qdrant:
   enabled: false                    # Set true to enable cross-campaign memory
   url: "http://37.27.228.106:6333"
-  collection: "rachel-memories"
+  collection: "rachel-memories"     # Creative loop memories
+  signals_collection: "autoresearch-signals"  # News + reddit signal vectors
   openai_api_key: "YOUR_OPENAI_KEY"
   recall_top_k: 5                   # How many memories to pull per cycle
 
