@@ -76,6 +76,42 @@ def load_baseline(winner: dict | None = None) -> str:
     return baseline
 
 
+def recall_from_qdrant(offer_context: str, config: dict) -> str:
+    """Pull top relevant memories from Qdrant to seed the generator."""
+    from openai import OpenAI
+    from qdrant_client import QdrantClient
+
+    qdrant_cfg = config.get("qdrant", {})
+    qdrant_url = qdrant_cfg.get("url", "http://37.27.228.106:6333")
+    collection = qdrant_cfg.get("collection", "rachel-memories")
+    openai_key = qdrant_cfg.get("openai_api_key", "")
+    top_k = qdrant_cfg.get("recall_top_k", 5)
+
+    if not openai_key:
+        return "Qdrant enabled but no OpenAI API key configured."
+
+    client = OpenAI(api_key=openai_key)
+    embedding_resp = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=offer_context,
+    )
+    vector = embedding_resp.data[0].embedding
+
+    qdrant_client = QdrantClient(url=qdrant_url)
+    results = qdrant_client.search(
+        collection_name=collection,
+        query_vector=vector,
+        limit=top_k,
+        with_payload=True,
+    )
+
+    if not results:
+        return "No prior memories found for this offer/platform."
+
+    chunks = [f"- [{r.payload.get('cycle', '?')}] {r.payload.get('text', '')}" for r in results]
+    return "\n".join(chunks)
+
+
 def generate_challenger(winner: dict | None, dry_run: bool = False) -> str:
     config = load_config()
     prompts = load_prompts()
@@ -84,8 +120,19 @@ def generate_challenger(winner: dict | None, dry_run: bool = False) -> str:
     frameworks = load_frameworks(config)
     learnings = load_learnings()
     baseline = load_baseline(winner)
+    qdrant_memories = ""
 
     offer = config["offer"]
+    if config.get("qdrant", {}).get("enabled", False) and not dry_run:
+        offer_ctx = f"{offer['name']} {offer.get('niche', '')} {offer.get('platform', 'meta')}"
+        print("[GENERATE] Recalling Qdrant memories...")
+        qdrant_memories = recall_from_qdrant(offer_ctx, config)
+        print(f"  Found {qdrant_memories.count(chr(10)) + 1} relevant memories")
+
+    qdrant_block = ""
+    if qdrant_memories:
+        qdrant_block = f"--- QDRANT MEMORY RECALL (cross-campaign patterns) ---\n{qdrant_memories}\n\n"
+
     user_prompt = (
         f"OFFER: {offer['name']}\n"
         f"NICHE: {offer['niche']}\n"
@@ -93,6 +140,7 @@ def generate_challenger(winner: dict | None, dry_run: bool = False) -> str:
         f"TARGET CPA: ${offer['target_cpa']}\n\n"
         f"--- CURRENT BASELINE ---\n{baseline}\n\n"
         f"--- ACCUMULATED LEARNINGS ---\n{learnings}\n\n"
+        f"{qdrant_block}"
         f"--- CREATIVE FRAMEWORKS ---\n{frameworks}\n\n"
         "Write the next challenger creative. Make ONE meaningful change. "
         "Ground it in the learnings. Don't repeat what's already failed."
