@@ -130,15 +130,18 @@ experiment:
 
 ## Output Artifacts
 
-After a run, results land in `outputs/<run-id>/`:
+After a run, results land in `artifacts/rc-<timestamp>/`:
 
 | File | Description |
 |------|-------------|
-| `paper.md` / `paper.pdf` | Final research paper |
-| `experiments/` | Code, results, charts |
-| `literature/` | Fetched papers + summaries |
-| `citations.bib` | BibTeX references |
-| `pipeline.log` | Full stage-by-stage log |
+| `stage-22*/paper_final.md` | Final research paper (Markdown) |
+| `stage-22*/paper_final_latex.md` | LaTeX version (if generated) |
+| `stage-12*/runs/results.json` | Experiment results + metrics |
+| `stage-14*/charts/` | Result charts (PNG) |
+| `stage-14*/analysis.md` | Multi-perspective analysis |
+| `stage-08*/hypotheses.md` | Generated research hypotheses |
+| `pipeline_summary.json` | Full stage-by-stage summary |
+| `checkpoint.json` | Last completed stage (resume point) |
 
 ---
 
