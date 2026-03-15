@@ -1,0 +1,98 @@
+# AutoResearchClaw Config — Bill's Server
+# Generated 2026-03-15
+
+# ── Meta Marketing API ──────────────────────────────────────────────────────
+meta:
+  access_token: "YOUR_META_ACCESS_TOKEN"
+  ad_account_id: "act_XXXXXXXXXX"
+  app_id: "YOUR_APP_ID"
+  app_secret: "YOUR_APP_SECRET"
+
+# ── LLM (Challenger Generator) ───────────────────────────────────────────────
+llm:
+  provider: "anthropic"
+  model: "claude-sonnet-4-6"
+  api_key: "YOUR_ANTHROPIC_API_KEY"
+
+# ── Loop Settings ────────────────────────────────────────────────────────────
+loop:
+  frequency_hours: 48
+  min_spend_threshold: 20.0
+  min_impressions: 500
+  evaluation_window_days: 2
+
+# ── Kill Rules ───────────────────────────────────────────────────────────────
+kill_rules:
+  hook_rate_min: 0.15
+  ctr_min: 0.005
+  cpa_max_multiplier: 3.0
+
+# ── Offer Config ─────────────────────────────────────────────────────────────
+offer:
+  name: "Auto Insurance"
+  target_cpa: 50.0
+  target_roas: 2.0
+  awareness_stage: 3
+  niche: "auto_insurance"
+  platform: "native"
+
+# ── Notifications ────────────────────────────────────────────────────────────
+notifications:
+  slack_webhook: ""
+  notify_on: ["harvest", "winner", "deploy", "kill"]
+
+# -- Discord Signal Channels --------------------------------------------------
+discord:
+  webhook_url: 'https://discord.com/api/webhooks/1482870276164423752/7sEra1Txrt_Fx5oopm48ZC2gaK7h4YQUld8nefCsZR0MHg-5dPaz3VrSnVBHkt86euxi'
+  channel_id: '1482849535473614848'
+  competitor_webhook_url: 'https://discord.com/api/webhooks/1482870277636358335/WEcFKitzUeIVEqJaqqn_Cf1s_uMlmgZ6QjVQkjdHBD_6XIz8ms6VGHo5d58DW_6VGxEn'
+  competitor_channel_id: '1482851982837547048'
+  intel_webhook_url: 'https://discord.com/api/webhooks/1482870279205163139/Bziv7rQoUI05N7xduoXLGr3kZ8a1Rjh9jJcRaR_QggTv9txFMSvA2QrPabxLdxIP8z99'
+  intel_channel_id: '1482366898762022915'
+  research_webhook_url: 'https://discord.com/api/webhooks/1482870282065674341/rD4xxc38YgeDE-lMiRxqVsQxdXSPgthjdGV27B7olaXfv0Ng1g6yMkOmsNQsKcCZKme-'
+  research_channel_id: '1482667804359397438'
+
+# ── Frameworks Path ──────────────────────────────────────────────────────────
+frameworks_path: "../creative"
+
+# ── Qdrant Memory ────────────────────────────────────────────────────────────
+qdrant:
+  enabled: false
+  url: "http://37.27.228.106:6333"
+  collection: "rachel-memories"
+  openai_api_key: "YOUR_OPENAI_KEY"
+  recall_top_k: 5
+
+# ── Approval Gate ────────────────────────────────────────────────────────────
+approval_gate:
+  enabled: false
+  bot_token: "YOUR_DISCORD_BOT_TOKEN"
+  channel_id: "1482366861650690200"
+  allowed_reactors: []
+  timeout_hours: 4
+  timeout_action: "kill"
+  poll_interval_seconds: 60
+
+# ── Intel Harvest ────────────────────────────────────────────────────────────
+intel_harvest:
+  enabled: true
+
+# ── Anstrex ──────────────────────────────────────────────────────────────────
+anstrex:
+  bearer_token: "631281|opCWb4Y22xWM1AidmVUjyLVAFe0y08F0uesjEQqy71c6a5b3"
+  platform: "native"
+  min_running_days: 30
+
+# ── Baserow (Intel Memory + Creative Brief Store) ────────────────────────────
+baserow:
+  enabled: true
+  email: "ariel@pigeonfi.com"
+  password: "r4].Q2DtO}I88KWNcX)h"
+  # Table IDs in AutoResearchClaw database (id=214):
+  # intel_ads: 813 | hooks: 814 | creative_briefs: 815 | loop_results: 816
+
+# ── Tavily (Reddit + Forum Audience Language) ────────────────────────────────
+tavily:
+  api_key: "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"
+  include_news: false
+  max_results_per_query: 5
