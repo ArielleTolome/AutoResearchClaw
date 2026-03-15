@@ -64,7 +64,9 @@ def build_embed(news_rows: list[dict], reddit_rows: list[dict], date_str: str) -
     news_bullets = []
     for row in news_rows[:3]:
         vertical  = row.get("Vertical") or row.get("vertical", "General")
-        sentiment = row.get("Sentiment Impact") or row.get("sentiment_impact", "Neutral")
+        _sentiment = row.get("Sentiment Impact") or row.get("sentiment_impact", "Neutral")
+        # Baserow select fields return dicts like {"id":1,"value":"Bullish","color":"blue"}
+        sentiment = _sentiment.get("value", "Neutral") if isinstance(_sentiment, dict) else str(_sentiment)
         headline  = (row.get("Headline") or row.get("headline") or row.get("title") or "")[:80]
         emoji = SENTIMENT_EMOJI.get(sentiment, "➡️")
         news_bullets.append(f"**{vertical}** {emoji} — {headline}")
