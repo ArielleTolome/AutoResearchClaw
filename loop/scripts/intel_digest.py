@@ -80,10 +80,16 @@ def build_embed(news_rows: list[dict], reddit_rows: list[dict], date_str: str) -
         emoji = EMOTION_EMOJI.get(emotion, "")
         reddit_bullets.append(f"_{hook}_ {emoji} — r/{sub}")
 
-    # Vertical pulse — combined count (handle both Title Case and snake_case field names)
+    def _str_field(val, default="Other"):
+        """Unwrap Baserow select dicts or return string as-is."""
+        if isinstance(val, dict):
+            return val.get("value", default)
+        return str(val) if val else default
+
+    # Vertical pulse — combined count
     all_verticals = (
-        [(r.get("Vertical") or r.get("vertical") or "Other") for r in news_rows] +
-        [(r.get("vertical") or "Other") for r in reddit_rows]
+        [_str_field(r.get("Vertical") or r.get("vertical")) for r in news_rows] +
+        [_str_field(r.get("vertical")) for r in reddit_rows]
     )
     vertical_counts = Counter(all_verticals).most_common(8)
     pulse_lines = [f"{v}: **{c}**" for v, c in vertical_counts]
