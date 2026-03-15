@@ -104,7 +104,9 @@ def fetch_ads(keyword: str) -> list[dict]:
             timeout=20,
         )
         r.raise_for_status()
-        hits = r.json().get("hits", {}).get("hits", [])
+        rdata = r.json()
+        # Response is under data.data (not hits.hits)
+        hits = rdata.get("data", {}).get("data", []) or rdata.get("hits", {}).get("hits", [])
         for hit in hits[:10]:
             src = hit.get("_source", {})
             title = src.get("title", "")
