@@ -211,6 +211,7 @@ def run_intel_harvest(config: dict, dry_run: bool = False) -> dict:
     from sources.youtube_source import fetch_youtube_hooks
     from sources.anstrex_source import fetch_anstrex_ads
     from sources.tavily_source import fetch_tavily_audience
+    from sources.reviews_source import fetch_reviews
 
     niche = config.get("offer", {}).get("niche", "general")
     platform = config.get("offer", {}).get("platform", "")
@@ -257,6 +258,13 @@ def run_intel_harvest(config: dict, dry_run: bool = False) -> dict:
     except Exception as e:
         print(f"[INTEL] Tavily failed: {e}")
         combined["tavily"] = []
+
+    # Reviews (Trustpilot, ConsumerAffairs, BBB — 1★/5★/3★ buyer language)
+    try:
+        combined["reviews"] = fetch_reviews(config, topic, dry_run=dry_run)
+    except Exception as e:
+        print(f"[INTEL] Reviews failed: {e}")
+        combined["reviews"] = []
 
     # Summary
     for src, ads in combined.items():

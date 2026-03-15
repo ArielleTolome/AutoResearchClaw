@@ -1,5 +1,25 @@
 # AutoResearchClaw Changelog
 
+## v1.4.0 — 2026-03-15
+
+### Added
+- **Reviews source** (`loop/scripts/sources/reviews_source.py`) — mine competitor brand reviews for raw buyer language
+  - Sources: Trustpilot, ConsumerAffairs, BBB, Yelp, SiteJabber (via Tavily — same key, no extra cost)
+  - **Why reviews beat Amazon for this use case:** competitor brand reviews = emotional language about the exact pain your offer solves
+  - Star-bucketed output: `hook_type: review_1star` (pain/objections) / `review_5star` (desired outcomes) / `review_3star` (nuanced truth)
+  - Auto-inferred angle labels: `pricing_pain`, `loyalty_betrayal`, `savings_discovery`, `claim_experience`, `ease_of_use`, `abandonment_fear`
+  - Niche-specific query sets for: auto_insurance, dental_implants, weight_loss, medicare, debt_relief, home_insurance, life_insurance
+  - Config: `reviews.max_results_per_query`, `reviews.star_filter` ("1"/"5"/"3"/"all")
+  - Reuses `tavily.api_key` — no new credentials needed
+- Reviews wired into `run_intel_harvest()` as 6th source
+
+### How to use the star buckets
+- **1★ reviews** → hooks that agitate pain: "Still waiting 8 months for my claim to be paid"
+- **5★ reviews** → hooks that inspire desire: "Switched in 10 minutes and saved $800/year"
+- **3★ reviews** → angle refinement: find what's *almost* right about competitors
+
+---
+
 ## v1.3.0 — 2026-03-15
 
 ### Added
