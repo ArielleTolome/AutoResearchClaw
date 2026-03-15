@@ -1507,13 +1507,68 @@ def _execute_literature_collect(
             else:
                 logger.warning(
                     "Stage 4 (ads mode): live fetch returned no results — "
-                    "falling through to LLM synthesis"
+                    "using LLM synthesis to generate ad-creative candidates"
                 )
         except Exception:  # noqa: BLE001
             logger.warning(
-                "Stage 4 (ads mode): live fetch failed — falling through to LLM synthesis",
+                "Stage 4 (ads mode): live fetch failed — using LLM synthesis",
                 exc_info=True,
             )
+
+        # --- ADS MODE FALLBACK: LLM-synthesized ad-creative candidates ---
+        # Do NOT fall through to the academic paper pipeline when in ads mode.
+        # Instead, generate synthetic ad-creative intelligence via LLM.
+        if llm is not None:
+            _pm = prompts or PromptManager()
+            sp = _pm.for_stage("literature_collect", topic=topic)
+            logger.info("Stage 4 (ads mode): synthesizing ad-creative candidates via LLM...")
+            try:
+                resp = _chat_with_prompt(
+                    llm,
+                    sp.system,
+                    sp.user,
+                    json_mode=sp.json_mode,
+                    max_tokens=sp.max_tokens,
+                )
+                payload = _safe_json_loads(resp.content, {})
+                synth_candidates: list[dict] = []
+                if isinstance(payload, dict) and isinstance(payload.get("candidates"), list):
+                    synth_candidates = [c for c in payload["candidates"] if isinstance(c, dict)]
+                if synth_candidates:
+                    out = stage_dir / "candidates.jsonl"
+                    _write_jsonl(out, synth_candidates)
+                    (stage_dir / "search_meta.json").write_text(
+                        json.dumps({
+                            "mode": "ads_llm_synthesis",
+                            "platform": platform,
+                            "real_search": False,
+                            "total_candidates": len(synth_candidates),
+                            "bibtex_entries": 0,
+                            "ts": _utcnow_iso(),
+                            "sources": ["llm_synthesis"],
+                        }, indent=2),
+                        encoding="utf-8",
+                    )
+                    logger.info("Stage 4 (ads mode): synthesized %d candidates", len(synth_candidates))
+                    return StageResult(
+                        stage=Stage.LITERATURE_COLLECT,
+                        status=StageStatus.DONE,
+                        artifacts=("candidates.jsonl", "search_meta.json"),
+                        evidence_refs=("stage-04/candidates.jsonl", "stage-04/search_meta.json"),
+                    )
+            except Exception:  # noqa: BLE001
+                logger.warning("Stage 4 (ads mode): LLM synthesis failed", exc_info=True)
+        # If all ads-mode paths exhausted, return empty-candidate result rather than
+        # leaking into the academic pipeline which produces irrelevant arXiv papers.
+        logger.warning("Stage 4 (ads mode): all fallbacks exhausted, returning empty candidates")
+        empty_out = stage_dir / "candidates.jsonl"
+        empty_out.write_text("", encoding="utf-8")
+        return StageResult(
+            stage=Stage.LITERATURE_COLLECT,
+            status=StageStatus.DONE,
+            artifacts=("candidates.jsonl",),
+            evidence_refs=("stage-04/candidates.jsonl",),
+        )
 
     # Read queries.json from Stage 3 (F1.5 output)
     queries_text = _read_prior_artifact(run_dir, "queries.json")
