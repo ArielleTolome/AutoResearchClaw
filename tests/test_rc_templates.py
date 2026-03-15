@@ -79,8 +79,8 @@ class TestRenderPreamble:
 
     def test_neurips_preamble_structure(self) -> None:
         tex = NEURIPS_2024.render_preamble("My Title", "J. Doe", "An abstract.")
-        assert r"\documentclass[preprint]{article}" in tex
-        assert r"\usepackage{neurips_2024}" in tex
+        assert r"\documentclass{article}" in tex
+        assert r"\usepackage[preprint]{neurips_2024}" in tex
         assert r"\title{My Title}" in tex
         assert r"\author{J. Doe}" in tex
         assert r"\begin{abstract}" in tex
@@ -403,8 +403,8 @@ class TestMarkdownToLatex:
 
     def test_neurips_full(self) -> None:
         tex = markdown_to_latex(self.SAMPLE_MD, NEURIPS_2024)
-        assert r"\documentclass[preprint]{article}" in tex
-        assert r"\usepackage{neurips_2024}" in tex
+        assert r"\documentclass{article}" in tex
+        assert r"\usepackage[preprint]{neurips_2024}" in tex
         assert r"\title{My Great Paper}" in tex
         assert r"\begin{abstract}" in tex
         assert "This is the abstract." in tex

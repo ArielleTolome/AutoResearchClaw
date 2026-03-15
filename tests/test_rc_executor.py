@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -2623,7 +2624,7 @@ class TestStdoutFailureDetection:
                 "metric_key": "primary_metric",
                 "metric_direction": "minimize",
                 "sandbox": {
-                    "python_path": "/opt/anaconda3/bin/python3",
+                    "python_path": sys.executable,
                     "gpu_required": False,
                     "max_memory_mb": 512,
                     "allowed_imports": ["json"],
@@ -2682,7 +2683,7 @@ class TestStdoutFailureDetection:
                 "metric_key": "primary_metric",
                 "metric_direction": "minimize",
                 "sandbox": {
-                    "python_path": "/opt/anaconda3/bin/python3",
+                    "python_path": sys.executable,
                     "gpu_required": False,
                     "max_memory_mb": 512,
                     "allowed_imports": ["json"],

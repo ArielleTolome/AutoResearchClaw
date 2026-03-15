@@ -14,6 +14,7 @@ import yaml
 from researchclaw.adapters import AdapterBundle
 from researchclaw.config import RCConfig
 from researchclaw.hardware import HardwareProfile, detect_hardware, ensure_torch_available, is_metric_name
+from researchclaw.llm import create_llm_client
 from researchclaw.llm.client import LLMClient
 from researchclaw.prompts import PromptManager
 from researchclaw.pipeline.stages import (
@@ -6091,13 +6092,15 @@ def execute_stage(
 
     llm = None
     try:
-        candidate = LLMClient.from_rc_config(config)
-        # CLI providers don't use base_url/api_key — authenticate via subprocess.
-        # Only require base_url+api_key for REST-based providers.
-        _cli_providers = {"claude-cli", "anthropic-oauth", "gemini-cli", "codex-cli"}
+        _cli_providers = {"claude-cli", "anthropic-oauth", "gemini-cli", "codex-cli", "acp"}
         _provider = getattr(config.llm, "provider", "") or "openai"
-        if _provider in _cli_providers or (candidate.config.base_url and candidate.config.api_key):
-            llm = candidate
+        if _provider == "acp":
+            llm = create_llm_client(config)
+        else:
+            candidate = LLMClient.from_rc_config(config)
+            # CLI providers authenticate via subprocess — skip base_url/api_key check
+            if _provider in _cli_providers or (candidate.config.base_url and candidate.config.api_key):
+                llm = candidate
     except Exception:  # noqa: BLE001
         llm = None
 

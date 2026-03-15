@@ -100,15 +100,27 @@ class OpenClawBridgeConfig:
 
 
 @dataclass(frozen=True)
+class AcpConfig:
+    """ACP (Agent Client Protocol) settings."""
+
+    agent: str = "claude"
+    cwd: str = "."
+    acpx_command: str = ""
+    session_name: str = "researchclaw"
+    timeout_sec: int = 600
+
+
+@dataclass(frozen=True)
 class LlmConfig:
-    base_url: str
-    api_key_env: str
-    provider: str = "openai"  # "openai" | "anthropic" | "openrouter"
+    provider: str = "openai"  # "openai" | "anthropic" | "openrouter" | "codex-cli" | "acp"
+    base_url: str = ""
+    api_key_env: str = ""
     api_key: str = ""
     primary_model: str = ""
     fallback_models: tuple[str, ...] = ()
     s2_api_key: str = ""
     notes: str = ""
+    acp: AcpConfig = field(default_factory=AcpConfig)
 
 
 @dataclass(frozen=True)
@@ -263,16 +275,7 @@ class RCConfig:
                 use_web_fetch=bool(bridge.get("use_web_fetch", False)),
                 use_browser=bool(bridge.get("use_browser", False)),
             ),
-            llm=LlmConfig(
-                provider=llm.get("provider", "openai") or "openai",
-                base_url=llm["base_url"],
-                api_key_env=llm["api_key_env"],
-                api_key=llm.get("api_key", ""),
-                primary_model=llm.get("primary_model", ""),
-                fallback_models=tuple(llm.get("fallback_models") or ()),
-                s2_api_key=llm.get("s2_api_key", ""),
-                notes=llm.get("notes", ""),
-            ),
+            llm=_parse_llm_config(llm),
             security=SecurityConfig(
                 hitl_required_stages=tuple(
                     int(s) for s in security.get("hitl_required_stages", (5, 9, 20))
@@ -321,9 +324,9 @@ def validate_config(
     errors: list[str] = []
     warnings: list[str] = []
 
-    # claude-cli provider doesn't need base_url or api_key_env
+    # CLI and ACP providers don't need base_url or api_key_env
     _provider = _get_by_path(data, "llm.provider") or "openai"
-    _cli_providers = {"claude-cli", "anthropic-oauth", "gemini-cli", "codex-cli"}
+    _cli_providers = {"claude-cli", "anthropic-oauth", "gemini-cli", "codex-cli", "acp"}
     _optional_for_cli = {"llm.base_url", "llm.api_key_env"}
 
     for key in REQUIRED_FIELDS:
@@ -373,6 +376,27 @@ def validate_config(
 
     return ValidationResult(
         ok=not errors, errors=tuple(errors), warnings=tuple(warnings)
+    )
+
+
+def _parse_llm_config(data: dict[str, Any]) -> LlmConfig:
+    acp_data = data.get("acp") or {}
+    return LlmConfig(
+        provider=data.get("provider", "openai-compatible"),
+        base_url=data.get("base_url", ""),
+        api_key_env=data.get("api_key_env", ""),
+        api_key=data.get("api_key", ""),
+        primary_model=data.get("primary_model", ""),
+        fallback_models=tuple(data.get("fallback_models") or ()),
+        s2_api_key=data.get("s2_api_key", ""),
+        notes=data.get("notes", ""),
+        acp=AcpConfig(
+            agent=acp_data.get("agent", "claude"),
+            cwd=acp_data.get("cwd", "."),
+            acpx_command=acp_data.get("acpx_command", ""),
+            session_name=acp_data.get("session_name", "researchclaw"),
+            timeout_sec=int(acp_data.get("timeout_sec", 600)),
+        ),
     )
 
 
