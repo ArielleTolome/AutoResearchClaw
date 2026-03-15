@@ -59,6 +59,7 @@ qdrant:
   enabled: false
   url: "http://37.27.228.106:6333"
   collection: "rachel-memories"
+  signals_collection: "autoresearch-signals"
 
 # ── Frameworks Path ───────────────────────────────────────────────────────────
 frameworks_path: "../creative"

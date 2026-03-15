@@ -26,6 +26,12 @@ from pathlib import Path
 
 import requests
 
+# ── Qdrant (conditional) ────────────────────────────────────────────────────
+try:
+    from qdrant_sink import upsert_signal as _qdrant_upsert
+except Exception:
+    _qdrant_upsert = None
+
 # ── Config ───────────────────────────────────────────────────────────────────
 BASEROW_URL        = os.getenv("BASEROW_URL", "https://baserow.pfsend.com")
 BASEROW_TOKEN      = os.getenv("BASEROW_TOKEN", "Yg1DSyEipxerKG9cuVJg6p6OjN0RTN4R")
@@ -362,6 +368,9 @@ def run(args):
             row_id = write_news_row(scored, field_options, dry_run=args.dry_run)
             if row_id or args.dry_run:
                 fire_discord_signal(scored)
+                # Qdrant vectorization (best-effort)
+                if _qdrant_upsert and not args.dry_run:
+                    _qdrant_upsert({**scored, "signal_type": "news"})
                 new_count += 1
                 total_new += 1
 

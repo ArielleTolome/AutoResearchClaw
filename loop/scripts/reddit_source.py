@@ -14,6 +14,12 @@ from pathlib import Path
 import requests
 import yaml
 
+# ── Qdrant (conditional) ────────────────────────────────────────────────────
+try:
+    from qdrant_sink import upsert_signal as _qdrant_upsert
+except Exception:
+    _qdrant_upsert = None
+
 # ── Config ───────────────────────────────────────────────────────────────────
 CFG_PATH = Path(__file__).parent.parent / "config" / "config.yaml"
 STATE_DIR = Path(__file__).parent.parent / "state"
@@ -255,6 +261,16 @@ def main():
             print(f"  [+] {scored.get('emotion')} | {scored.get('vertical')} | {post['title'][:50]}")
             write_to_baserow(post, scored, args.dry_run)
             fire_discord(post, scored, args.dry_run)
+            # Qdrant vectorization (best-effort)
+            if _qdrant_upsert and not args.dry_run:
+                _qdrant_upsert({
+                    **scored,
+                    "headline": post["title"],
+                    "source_url": post["url"],
+                    "source": f"r/{post['subreddit']}",
+                    "created_date": datetime.datetime.utcfromtimestamp(post["created_utc"]).strftime("%Y-%m-%d"),
+                    "signal_type": "reddit",
+                })
             scored_count += 1
             total_new += 1
             time.sleep(0.5)
