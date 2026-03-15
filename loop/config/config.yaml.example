@@ -1,0 +1,45 @@
+# AutoResearchClaw Config
+# Copy this to config.yaml and fill in your values
+
+# ── Meta Marketing API ──────────────────────────────────────────────────────
+meta:
+  access_token: "YOUR_META_ACCESS_TOKEN"
+  ad_account_id: "act_XXXXXXXXXX"
+  app_id: "YOUR_APP_ID"
+  app_secret: "YOUR_APP_SECRET"
+
+# ── LLM (Challenger Generator) ───────────────────────────────────────────────
+llm:
+  provider: "anthropic"
+  model: "claude-opus-4-6"          # or claude-sonnet-4-6 for lower cost
+  api_key: "YOUR_ANTHROPIC_API_KEY"
+
+# ── Loop Settings ────────────────────────────────────────────────────────────
+loop:
+  frequency_hours: 48               # How often to run the full loop
+  min_spend_threshold: 20.0         # Min $ spent before we judge an ad
+  min_impressions: 500              # Min impressions before we judge
+  evaluation_window_days: 2         # Look back N days for performance data
+
+# ── Kill Rules ───────────────────────────────────────────────────────────────
+kill_rules:
+  hook_rate_min: 0.15               # Kill if hook rate < 15% (Meta: 3-sec view rate)
+  ctr_min: 0.005                    # Kill if CTR < 0.5%
+  cpa_max_multiplier: 3.0           # Kill if CPA > 3x target CPA (Marcel's rule)
+
+# ── Offer Config ─────────────────────────────────────────────────────────────
+offer:
+  name: "YOUR OFFER NAME"
+  target_cpa: 50.0                  # Your CPA target in USD
+  target_roas: 2.0
+  awareness_stage: 3                # Schwartz 1-5 (1=unaware, 5=most aware)
+  niche: "auto_insurance"           # Used to load relevant framework prompts
+  platform: "meta"
+
+# ── Notifications ────────────────────────────────────────────────────────────
+notifications:
+  slack_webhook: "YOUR_SLACK_WEBHOOK_URL"   # Optional: Slack pings on each cycle
+  notify_on: ["harvest", "winner", "deploy", "kill"]
+
+# ── Frameworks Path ──────────────────────────────────────────────────────────
+frameworks_path: "../creative"      # Path to creative framework files

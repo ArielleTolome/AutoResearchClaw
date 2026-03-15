@@ -1,0 +1,109 @@
+name: AutoResearchClaw Loop
+
+on:
+  schedule:
+    # Runs every 48 hours at 9 AM UTC
+    - cron: '0 9 */2 * *'
+  workflow_dispatch:  # Allow manual trigger from GitHub Actions UI
+    inputs:
+      dry_run:
+        description: 'Dry run (no API calls)'
+        required: false
+        default: 'false'
+        type: boolean
+      step:
+        description: 'Run single step only (leave empty for full loop)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - harvest
+          - analyze
+          - generate
+          - deploy
+
+jobs:
+  run-loop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests anthropic pyyaml
+
+      - name: Write config from secrets
+        run: |
+          cat > auto_research_claw/config/config.yaml << 'EOF'
+          meta:
+            access_token: "${{ secrets.META_ACCESS_TOKEN }}"
+            ad_account_id: "${{ secrets.META_AD_ACCOUNT_ID }}"
+            page_id: "${{ secrets.META_PAGE_ID }}"
+
+          llm:
+            provider: anthropic
+            model: claude-opus-4-6
+            api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
+
+          loop:
+            frequency_hours: 48
+            min_spend_threshold: 20.0
+            min_impressions: 500
+            evaluation_window_days: 2
+
+          kill_rules:
+            hook_rate_min: 0.15
+            ctr_min: 0.005
+            cpa_max_multiplier: 3.0
+
+          offer:
+            name: "${{ secrets.OFFER_NAME }}"
+            target_cpa: ${{ secrets.TARGET_CPA || 50 }}
+            target_roas: 2.0
+            awareness_stage: 3
+            niche: "${{ secrets.OFFER_NICHE }}"
+            platform: meta
+
+          notifications:
+            slack_webhook: "${{ secrets.SLACK_WEBHOOK_URL }}"
+            notify_on: [harvest, winner, deploy, kill]
+
+          frameworks_path: "../creative"
+          EOF
+
+      - name: Run AutoResearchClaw
+        working-directory: auto_research_claw
+        run: |
+          STEP_ARG=""
+          if [ "${{ inputs.step }}" != "" ]; then
+            STEP_ARG="--step ${{ inputs.step }}"
+          fi
+
+          DRY_RUN=""
+          if [ "${{ inputs.dry_run }}" == "true" ]; then
+            DRY_RUN="--dry-run"
+          fi
+
+          python orchestrator/orchestrator.py \
+            $STEP_ARG \
+            $DRY_RUN \
+            --adset-id "${{ secrets.META_ADSET_ID }}" \
+            --image-hash "${{ secrets.META_IMAGE_HASH }}" \
+            --link-url "${{ secrets.OFFER_LINK_URL }}"
+
+      - name: Commit learnings
+        run: |
+          git config --local user.email "autoResearchClaw@github-actions"
+          git config --local user.name "AutoResearchClaw"
+          git add auto_research_claw/learnings/
+          git diff --staged --quiet || git commit -m "chore: AutoResearchClaw cycle $(date +%Y-%m-%d_%H%M)"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
