@@ -1,5 +1,33 @@
 # AutoResearchClaw Changelog
 
+## v1.6.0 — 2026-03-15
+
+### Added
+- **signals.py** — 32 typed Discord signal cards with dual-channel routing
+  - **Performance signals:** `WINNER`, `FATIGUE`, `KILL`, `SCALE`, `HOOK_RATE_SPIKE`, `CPM_SURGE`, `ZERO_SPEND`, `DAILY_CAP_HIT`
+  - **Testing signals:** `TEST_READY`, `VARIANT_DIVERGING`, `ANGLE_EXHAUSTED`, `NEW_ANGLE_IDENTIFIED`
+  - **Research signals:** `REDDIT_VERBATIM`, `COMPETITOR_NEW_AD`, `COMPETITOR_KILLED`, `TREND_DETECTED`
+  - **Loop health signals:** `LOOP_START`, `LOOP_ERROR`, `BRIEF_COMPLETE`, `CHALLENGER_READY`, `MEMORY_MILESTONE`, `LEARNING_CONSOLIDATION`, `LOOP_STREAK`, `CYCLE_SUMMARY`
+  - **Creative signals:** `HOOK_TYPE_RANKING`, `ANGLE_ROTATION_DUE`, `MODULAR_READY`, `AWARENESS_SHIFT`
+  - **Platform signals:** `NATIVE_ADVERTORIAL_CTR`, `PUSH_CLICK_ANOMALY`, `PLATFORM_WINNER`
+- **Dual-channel routing** — competitor intel (`COMPETITOR_NEW_AD`, `COMPETITOR_KILLED`, `TREND_DETECTED`, `NEW_ANGLE_IDENTIFIED`) routes to `#competitor-watch`; all other signals route to `#creative-signals`
+- Each signal card has: typed emoji header, color-coded embed, top metrics, score, recommended action, Rachel footer + timestamp
+- `CHALLENGER_READY` cards auto-post ✅/❌ reactions for the approval gate
+- CLI test mode: `python signals.py <signal_type>` fires a sample card
+- 32 convenience functions exported: `emit_winner()`, `emit_fatigue()`, `emit_competitor_new_ad()`, etc.
+- `config.yaml` — new `discord.competitor_webhook_url` + `discord.competitor_channel_id` fields
+
+### Config additions
+```yaml
+discord:
+  webhook_url: "YOUR_WEBHOOK"           # → #creative-signals
+  channel_id: "1482849535473614848"
+  competitor_webhook_url: "YOUR_WEBHOOK"  # → #competitor-watch
+  competitor_channel_id: "1482851982837547048"
+```
+
+---
+
 ## v1.5.0 — 2026-03-15
 
 ### Added
