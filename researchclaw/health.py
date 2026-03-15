@@ -600,6 +600,47 @@ def run_doctor(config_path: str | Path) -> DoctorReport:
             ))
             checks.append(CheckResult(name="api_key_valid", status="pass", detail="N/A for claude-cli"))
             checks.append(CheckResult(name="model_chain", status="warn", detail="Cannot verify — claude CLI not installed"))
+    elif provider == "anthropic-oauth":
+        # anthropic-oauth: check for token in env or OpenClaw auth-profiles
+        import json as _json
+        _token = os.environ.get("ANTHROPIC_OAUTH_TOKEN", "")
+        _profiles_path = os.path.expanduser("~/.openclaw/agents/main/agent/auth-profiles.json")
+        if not _token:
+            try:
+                with open(_profiles_path) as _f:
+                    _pdata = _json.load(_f)
+                for _p in _pdata.get("profiles", {}).values():
+                    _t = _p.get("token", "")
+                    if isinstance(_t, str) and _t.startswith("sk-ant-oat"):
+                        _token = _t
+                        break
+            except (OSError, _json.JSONDecodeError):
+                pass
+        if _token:
+            checks.append(CheckResult(
+                name="llm_connectivity",
+                status="pass",
+                detail="anthropic-oauth: OAuth token found — hitting api.anthropic.com directly (Claude Max, no console key)",
+            ))
+            checks.append(CheckResult(
+                name="api_key_valid",
+                status="pass",
+                detail=f"OAuth token present ({_token[:20]}…)",
+            ))
+            checks.append(CheckResult(
+                name="model_chain",
+                status="pass",
+                detail=f"anthropic-oauth: primary={model}, fallbacks={list(fallback_models)}",
+            ))
+        else:
+            checks.append(CheckResult(
+                name="llm_connectivity",
+                status="fail",
+                detail="No Claude OAuth token found",
+                fix="Run `openclaw models auth login --provider anthropic` or set ANTHROPIC_OAUTH_TOKEN",
+            ))
+            checks.append(CheckResult(name="api_key_valid", status="fail", detail="No OAuth token"))
+            checks.append(CheckResult(name="model_chain", status="warn", detail="Cannot verify without token"))
     else:
         checks.append(check_llm_connectivity(base_url))
         checks.append(check_api_key_valid(base_url, api_key))

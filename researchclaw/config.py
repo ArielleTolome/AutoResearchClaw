@@ -321,7 +321,7 @@ def validate_config(
 
     # claude-cli provider doesn't need base_url or api_key_env
     _provider = _get_by_path(data, "llm.provider") or "openai"
-    _cli_providers = {"claude-cli"}
+    _cli_providers = {"claude-cli", "anthropic-oauth"}
     _optional_for_cli = {"llm.base_url", "llm.api_key_env"}
 
     for key in REQUIRED_FIELDS:

@@ -5,6 +5,11 @@ Supported providers:
   - Anthropic — /messages, x-api-key auth, system as top-level param
   - OpenRouter — /chat/completions, Bearer auth + HTTP-Referer/X-Title
   - claude-cli — shells out to `claude --print` (Claude Max subscription, no API key needed)
+  - anthropic-oauth — hits api.anthropic.com/v1/messages directly using the Claude CLI OAuth
+                      token (sk-ant-oat01-…) with `anthropic-beta: oauth-2025-04-20`.
+                      No Anthropic console key needed — uses your Claude Max subscription.
+                      Token is auto-read from ~/.openclaw/agents/main/agent/auth-profiles.json
+                      or ANTHROPIC_OAUTH_TOKEN env var.
 
 Features:
   - Model fallback chain (configurable per provider)
@@ -270,9 +275,140 @@ class LLMClient:
             )
         if provider == "claude-cli":
             return self._call_claude_cli(model, messages, json_mode)
+        if provider == "anthropic-oauth":
+            return self._call_anthropic_oauth(
+                model, messages, max_tokens, temperature, json_mode
+            )
         # Default: OpenAI-compatible (covers "openai", "openai-compatible", etc.)
         return self._call_openai(
             model, messages, max_tokens, temperature, json_mode
+        )
+
+    # ------------------------------------------------------------------
+    # anthropic-oauth: direct REST using Claude Max OAuth token
+    # ------------------------------------------------------------------
+    _OAUTH_BETAS = "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14"
+    _OAUTH_PROFILES_PATH = os.path.expanduser(
+        "~/.openclaw/agents/main/agent/auth-profiles.json"
+    )
+
+    @classmethod
+    def _resolve_oauth_token(cls, explicit_key: str) -> str:
+        """Return the OAuth token to use, in priority order:
+        1. explicit api_key / api_key_env value in config
+        2. ANTHROPIC_OAUTH_TOKEN env var
+        3. ~/.openclaw/agents/main/agent/auth-profiles.json (OpenClaw store)
+        """
+        if explicit_key and explicit_key.startswith("sk-ant-oat"):
+            return explicit_key
+
+        env_token = os.environ.get("ANTHROPIC_OAUTH_TOKEN", "").strip()
+        if env_token:
+            return env_token
+
+        try:
+            with open(cls._OAUTH_PROFILES_PATH) as f:
+                data = json.load(f)
+            profiles = data.get("profiles", {})
+            for profile in profiles.values():
+                token = profile.get("token", "")
+                if isinstance(token, str) and token.startswith("sk-ant-oat"):
+                    return token
+        except (OSError, json.JSONDecodeError):
+            pass
+
+        raise RuntimeError(
+            "No Claude OAuth token found. "
+            "Run `openclaw models auth login --provider anthropic` or set "
+            "ANTHROPIC_OAUTH_TOKEN env var."
+        )
+
+    def _call_anthropic_oauth(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        temperature: float,
+        json_mode: bool,
+    ) -> LLMResponse:
+        """Direct Anthropic API call using Claude Max OAuth token.
+
+        Uses Authorization: Bearer <oat01-token> + anthropic-beta: oauth-2025-04-20.
+        No Anthropic console API key needed.
+        """
+        explicit = self.config.api_key or os.environ.get(
+            self.config.api_key_env or "", ""
+        )
+        token = self._resolve_oauth_token(explicit)
+        base_url = (
+            self.config.base_url.rstrip("/")
+            if self.config.base_url
+            else "https://api.anthropic.com"
+        )
+
+        # Split system messages
+        system_parts: list[str] = []
+        chat: list[dict[str, str]] = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_parts.append(msg["content"])
+            else:
+                chat.append(msg)
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": chat,
+        }
+        if system_parts:
+            payload["system"] = "\n\n".join(system_parts)
+        if temperature != 1.0:
+            payload["temperature"] = temperature
+        if json_mode:
+            # Anthropic doesn't have a native json_mode; append instruction
+            if payload["messages"] and payload["messages"][-1]["role"] == "user":
+                payload["messages"][-1] = {
+                    "role": "user",
+                    "content": payload["messages"][-1]["content"]
+                    + "\n\nRespond with valid JSON only.",
+                }
+
+        body = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"{base_url}/v1/messages",
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+                "anthropic-version": "2023-06-01",
+                "anthropic-beta": self._OAUTH_BETAS,
+                "User-Agent": "AutoResearchClaw/0.5 (anthropic-oauth)",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.config.timeout_sec) as resp:
+                data = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            body_text = e.read().decode()[:400]
+            raise urllib.error.HTTPError(
+                e.url, e.code, f"{e.reason}: {body_text}", e.headers, None
+            ) from e
+
+        content_blocks = data.get("content", [])
+        text = "".join(b.get("text", "") for b in content_blocks if b.get("type") == "text")
+        usage = data.get("usage", {})
+
+        return LLMResponse(
+            content=text,
+            model=data.get("model", model),
+            prompt_tokens=usage.get("input_tokens", 0),
+            completion_tokens=usage.get("output_tokens", 0),
+            total_tokens=usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+            finish_reason=data.get("stop_reason", "stop"),
+            truncated=data.get("stop_reason") == "max_tokens",
+            raw=data,
         )
 
     def _call_claude_cli(
