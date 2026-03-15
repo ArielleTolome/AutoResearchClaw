@@ -56,7 +56,7 @@ approval_gate:
 
 # ── Qdrant Memory ─────────────────────────────────────────────────────────────
 qdrant:
-  enabled: false
+  enabled: true
   url: "http://37.27.228.106:6333"
   collection: "rachel-memories"
   signals_collection: "autoresearch-signals"
