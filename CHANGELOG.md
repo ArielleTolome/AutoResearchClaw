@@ -1,5 +1,37 @@
 # AutoResearchClaw Changelog
 
+## v1.5.0 — 2026-03-15
+
+### Added
+- **Angle Fatigue Scorer** (`loop/scripts/angle_fatigue.py`)
+  - Scores every known angle on 4 dimensions: volume (# competitor ads) + diversity (# unique advertisers) + recency (how recently new entrants appeared) + longevity decay (are ads dying faster?)
+  - Output tiers: `FRESH` (<25) | `WARMING` (25–50) | `SATURATED` (51–75) | `DEAD` (>75)
+  - Covers all 10 ACA angles + 9 additional (geo_personalization, mechanism, loss_aversion, news_tie_in, etc.)
+  - Loads intel from Baserow (if configured) or falls back to local intel JSON harvest files
+  - Runs as **Step 2.5** — between Analyze and Generate every cycle
+  - Fatigue context injected into generate prompt: LLM actively avoids DEAD angles, prefers FRESH/WARMING
+  - Standalone: `python angle_fatigue.py` prints full fatigue heatmap for your niche
+- **Prediction Scorer** (`loop/scripts/prediction_scorer.py`)
+  - Pre-deploy creative scoring on 5 dimensions (25-point rubric, matching ACA Hook Scoring)
+  - **Hook Clarity** (LLM) — 3-second clarity test
+  - **Tension/Desire** (LLM) — pain agitation OR desire amplification
+  - **Angle Freshness** (fatigue data) — FRESH=5, WARMING=3, SATURATED=1, DEAD=0
+  - **Awareness Match** (rule-based) — Schwartz stage 1-5 copy alignment
+  - **Pattern Interrupt** (LLM) — scroll-stop quality
+  - Predicted hook rate output: `22-25→35-45%` | `18-21→25-35%` | `14-17→15-25%` | `<14→iterate`
+  - Config: `prediction.min_score_to_deploy` — set to 14 to block weak creatives from reaching gate
+  - Runs as **Step 3.3** — after Generate, before Approval Gate
+- Discord approval gate embed updated: now includes **prediction score block** + **angle fatigue heatmap** in every gate message
+- `generate_challenger()` accepts `fatigue_context` — angle fatigue data now steers LLM away from dead angles
+- New config sections: `prediction.*`, `angle_fatigue.*`
+
+### Loop flow (updated)
+```
+HARVEST → ANALYZE → [2.5 ANGLE FATIGUE] → GENERATE → [3.3 PREDICT] → GATE (with scores) → DEPLOY
+```
+
+---
+
 ## v1.4.0 — 2026-03-15
 
 ### Added

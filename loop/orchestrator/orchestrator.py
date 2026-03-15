@@ -32,6 +32,8 @@ from analyze import analyze
 from generate import generate_challenger
 from deploy import deploy
 from gate import run_gate
+from angle_fatigue import score_angle_fatigue, load_intel_from_baserow, format_fatigue_for_prompt
+from prediction_scorer import score_creative
 
 CONFIG_PATH = ROOT / "config" / "config.yaml"
 RUNS_DIR = ROOT / "learnings" / "runs"
@@ -80,13 +82,67 @@ def run_full_loop(dry_run: bool = False, adset_id: str = "", image_hash: str = "
     log(f"Winner: {winner['ad_name'] if winner else 'none'}")
     log(f"Kill list: {len(kill_list)} ads")
 
+    # ── STEP 2.5: ANGLE FATIGUE ──────────────────────────────────────────────
+    log("STEP 2.5: ANGLE FATIGUE")
+    niche = config.get("offer", {}).get("niche", "")
+    try:
+        intel_ads = load_intel_from_baserow(config, niche)
+        fatigue_results = score_angle_fatigue(intel_ads, niche=niche, dry_run=dry_run)
+        fatigue_context = format_fatigue_for_prompt(fatigue_results)
+        log(f"Fatigue scored for {len(fatigue_results)} angles")
+    except Exception as e:
+        log(f"Angle fatigue failed (non-fatal): {e}")
+        fatigue_results = {}
+        fatigue_context = ""
+
     # ── STEP 3: GENERATE ──────────────────────────────────────────────────────
     log("STEP 3: GENERATE")
-    challenger_brief = generate_challenger(winner, dry_run=dry_run)
+    challenger_brief = generate_challenger(winner, dry_run=dry_run, fatigue_context=fatigue_context)
+
+    # ── STEP 3.3: PREDICTION SCORE ────────────────────────────────────────────
+    log("STEP 3.3: PREDICTION SCORE")
+    import re as _re
+    hook_match = _re.search(r"--- HOOK ---\n(.+?)---", challenger_brief, _re.DOTALL)
+    body_match = _re.search(r"--- BODY ---\n(.+?)---", challenger_brief, _re.DOTALL)
+    cta_match = _re.search(r"--- CTA ---\n(.+?)---", challenger_brief, _re.DOTALL)
+    angle_match = _re.search(r"ANGLE:\s*(.+)", challenger_brief)
+
+    hook_text = hook_match.group(1).strip() if hook_match else ""
+    body_text = body_match.group(1).strip() if body_match else ""
+    cta_text = cta_match.group(1).strip() if cta_match else ""
+    angle_text = angle_match.group(1).strip() if angle_match else ""
+
+    try:
+        score_result = score_creative(
+            hook=hook_text,
+            body=body_text,
+            cta=cta_text,
+            angle=angle_text,
+            fatigue_results=fatigue_results,
+            dry_run=dry_run,
+        )
+        log(f"Prediction: {score_result['total_score']}/25 — {score_result['prediction_label']} (HR: {score_result['predicted_hook_rate']})")
+
+        # Block deploy if score is critically low and blocking is enabled
+        if (
+            not dry_run
+            and score_result["total_score"] < config.get("prediction", {}).get("min_score_to_deploy", 0)
+        ):
+            log(f"⛔ Score {score_result['total_score']} below minimum — skipping deploy this cycle")
+            log("Tip: review prediction_scorer output and rewrite the weakest dimension")
+            return
+    except Exception as e:
+        log(f"Prediction scorer failed (non-fatal): {e}")
+        score_result = None
 
     # ── STEP 3.5: APPROVAL GATE ──────────────────────────────────────────────
     log("STEP 3.5: APPROVAL GATE")
-    should_deploy = run_gate(challenger_brief, dry_run=dry_run)
+    should_deploy = run_gate(
+        challenger_brief,
+        dry_run=dry_run,
+        score_result=score_result,
+        fatigue_results=fatigue_results,
+    )
 
     if not should_deploy:
         log("Challenger was rejected or timed out. Skipping deploy this cycle.")
