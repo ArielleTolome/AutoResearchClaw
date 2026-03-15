@@ -60,13 +60,17 @@ def fetch_baserow(table_id: int, size: int = 50) -> list[dict]:
 def build_embed(news_rows: list[dict], reddit_rows: list[dict], date_str: str) -> dict:
     total = len(news_rows) + len(reddit_rows)
 
+    def _str_field(val, default="Other"):
+        """Unwrap Baserow select dicts or return string as-is."""
+        if isinstance(val, dict):
+            return val.get("value", default)
+        return str(val) if val else default
+
     # Top 3 news signals (Baserow field names use Title Case)
     news_bullets = []
     for row in news_rows[:3]:
-        vertical  = row.get("Vertical") or row.get("vertical", "General")
-        _sentiment = row.get("Sentiment Impact") or row.get("sentiment_impact", "Neutral")
-        # Baserow select fields return dicts like {"id":1,"value":"Bullish","color":"blue"}
-        sentiment = _sentiment.get("value", "Neutral") if isinstance(_sentiment, dict) else str(_sentiment)
+        vertical  = _str_field(row.get("Vertical") or row.get("vertical"), "General")
+        sentiment = _str_field(row.get("Sentiment Impact") or row.get("sentiment_impact"), "Neutral")
         headline  = (row.get("Headline") or row.get("headline") or row.get("title") or "")[:80]
         emoji = SENTIMENT_EMOJI.get(sentiment, "➡️")
         news_bullets.append(f"**{vertical}** {emoji} — {headline}")
@@ -79,12 +83,6 @@ def build_embed(news_rows: list[dict], reddit_rows: list[dict], date_str: str) -
         emotion = row.get("emotion", "")
         emoji = EMOTION_EMOJI.get(emotion, "")
         reddit_bullets.append(f"_{hook}_ {emoji} — r/{sub}")
-
-    def _str_field(val, default="Other"):
-        """Unwrap Baserow select dicts or return string as-is."""
-        if isinstance(val, dict):
-            return val.get("value", default)
-        return str(val) if val else default
 
     # Vertical pulse — combined count
     all_verticals = (
