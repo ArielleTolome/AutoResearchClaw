@@ -29,7 +29,7 @@ BASEROW_KEY       = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_API
 INTEL_WEBHOOK     = CFG.get("discord", {}).get("intel_webhook_url", os.getenv("INTEL_WEBHOOK_URL", ""))
 BASEROW_TABLE     = 768
 BASEROW_URL       = f"https://api.baserow.io/api/database/rows/table/{BASEROW_TABLE}/?user_field_names=true"
-REDDIT_UA         = "AutoResearchClaw/1.9 audience-research"
+REDDIT_UA         = "Mozilla/5.0 (compatible; AutoResearchClaw/1.9; +https://github.com/ArielleTolome/AutoResearchClaw)"
 
 SUBREDDITS = [
     "InsuranceAgent",
@@ -87,8 +87,8 @@ def fetch_posts(subreddit: str, limit: int = 25) -> list[dict]:
     posts = []
     headers = {"User-Agent": REDDIT_UA}
     endpoints = [
-        f"https://www.reddit.com/r/{subreddit}/hot.json?limit={limit}",
-        f"https://www.reddit.com/r/{subreddit}/top.json?t=month&limit={limit}",
+        f"https://old.reddit.com/r/{subreddit}/hot.json?limit={limit}",
+        f"https://old.reddit.com/r/{subreddit}/top.json?t=month&limit={limit}",
     ]
     for url in endpoints:
         try:
