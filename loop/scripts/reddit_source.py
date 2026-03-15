@@ -25,10 +25,12 @@ def load_config() -> dict:
     return {}
 
 CFG = load_config()
-BASEROW_KEY       = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_API_KEY", ""))
+BASEROW_KEY       = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_TOKEN", "Yg1DSyEipxerKG9cuVJg6p6OjN0RTN4R"))
+BASEROW_BASE_URL  = CFG.get("baserow", {}).get("url", "https://baserow.pfsend.com")
 INTEL_WEBHOOK     = CFG.get("discord", {}).get("intel_webhook_url", os.getenv("INTEL_WEBHOOK_URL", ""))
-BASEROW_TABLE     = 768
-BASEROW_URL       = f"https://api.baserow.io/api/database/rows/table/{BASEROW_TABLE}/?user_field_names=true"
+TAVILY_KEY        = CFG.get("tavily", {}).get("api_key", os.getenv("TAVILY_API_KEY", "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"))
+BASEROW_TABLE     = 818  # reddit_audience_signals
+BASEROW_URL       = f"{BASEROW_BASE_URL}/api/database/rows/table/{BASEROW_TABLE}/?user_field_names=true"
 REDDIT_UA         = "Mozilla/5.0 (compatible; AutoResearchClaw/1.9; +https://github.com/ArielleTolome/AutoResearchClaw)"
 
 SUBREDDITS = [
@@ -82,40 +84,52 @@ def save_seen(seen: set):
     SEEN_PATH.write_text(json.dumps(list(seen)))
 
 
-# ── Reddit fetch ──────────────────────────────────────────────────────────────
+# ── Reddit fetch via Tavily ───────────────────────────────────────────────────
 def fetch_posts(subreddit: str, limit: int = 25) -> list[dict]:
+    """Use Tavily search with site:reddit.com/r/{sub} to bypass IP blocks."""
     posts = []
-    headers = {"User-Agent": REDDIT_UA}
-    endpoints = [
-        f"https://old.reddit.com/r/{subreddit}/hot.json?limit={limit}",
-        f"https://old.reddit.com/r/{subreddit}/top.json?t=month&limit={limit}",
+    if not TAVILY_KEY:
+        print(f"  [WARN] No TAVILY_API_KEY — cannot fetch r/{subreddit}")
+        return posts
+
+    queries = [
+        f"site:reddit.com/r/{subreddit} insurance OR debt OR claim OR premium OR coverage",
+        f"site:reddit.com/r/{subreddit} help OR advice OR problem OR frustrated OR confused",
     ]
-    for url in endpoints:
+
+    for query in queries:
         try:
-            r = requests.get(url, headers=headers, timeout=15)
-            if r.status_code == 429:
-                time.sleep(5)
-                r = requests.get(url, headers=headers, timeout=15)
+            r = requests.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key":        TAVILY_KEY,
+                    "query":          query,
+                    "search_depth":   "basic",
+                    "max_results":    limit // 2,
+                    "include_answer": False,
+                },
+                timeout=20,
+            )
             r.raise_for_status()
-            data = r.json()
-            for child in data.get("data", {}).get("children", []):
-                p = child.get("data", {})
-                if p.get("is_self") is False and not p.get("selftext"):
-                    continue  # skip link-only posts with no body
+            for result in r.json().get("results", []):
+                url = result.get("url", "")
+                if "reddit.com/r/" not in url:
+                    continue
                 posts.append({
-                    "title":       p.get("title", ""),
-                    "body":        (p.get("selftext") or "")[:500],
-                    "score":       p.get("score", 0),
-                    "num_comments": p.get("num_comments", 0),
-                    "url":         f"https://reddit.com{p.get('permalink', '')}",
-                    "subreddit":   subreddit,
-                    "created_utc": p.get("created_utc", 0),
+                    "title":        result.get("title", "")[:300],
+                    "body":         result.get("content", "")[:500],
+                    "score":        0,
+                    "num_comments": 0,
+                    "url":          url,
+                    "subreddit":    subreddit,
+                    "created_utc":  0,
                 })
-            time.sleep(1)  # be polite
+            time.sleep(0.5)
         except Exception as e:
-            print(f"  [WARN] Reddit fetch failed for r/{subreddit}: {e}")
+            print(f"  [WARN] Tavily fetch failed for r/{subreddit}: {e}")
+
     # dedupe within batch by url
-    seen_urls = set()
+    seen_urls: set = set()
     unique = []
     for p in posts:
         if p["url"] not in seen_urls:

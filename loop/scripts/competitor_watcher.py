@@ -26,17 +26,17 @@ def load_config() -> dict:
 
 CFG                 = load_config()
 COMPETITOR_WEBHOOK  = CFG.get("discord", {}).get("competitor_webhook_url", os.getenv("COMPETITOR_WEBHOOK_URL", ""))
-FB_ACCESS_TOKEN     = CFG.get("facebook", {}).get("access_token", os.getenv("FB_ACCESS_TOKEN", ""))
+ANSTREX_TOKEN       = CFG.get("anstrex", {}).get("bearer_token", os.getenv("ANSTREX_TOKEN", "631281|opCWb4Y22xWM1AidmVUjyLVAFe0y08F0uesjEQqy71c6a5b3"))
 
-# Vertical → search query
+# Vertical → search keyword for Anstrex native ads
 VERTICAL_QUERIES = [
-    ("Auto Insurance",       "car insurance quote"),
-    ("Medicare",             "Medicare Advantage 2026"),
-    ("ACA / Health",         "health insurance quote"),
-    ("Debt Settlement",      "debt relief program"),
-    ("Tax Settlement",       "tax relief IRS"),
-    ("Final Expense",        "final expense insurance"),
-    ("Home Insurance",       "home insurance quote"),
+    ("Auto Insurance",   "car insurance"),
+    ("Medicare",         "Medicare Advantage"),
+    ("ACA / Health",     "health insurance"),
+    ("Debt Settlement",  "debt relief"),
+    ("Tax Settlement",   "tax relief"),
+    ("Final Expense",    "final expense"),
+    ("Home Insurance",   "home insurance"),
 ]
 
 SCORE_PROMPT = """Analyze this Facebook ad for leadgen competitive intelligence. Respond with ONLY a JSON object, nothing else.
@@ -77,75 +77,53 @@ def ad_hash(advertiser: str, body: str) -> str:
     return hashlib.md5(key.encode()).hexdigest()[:12]
 
 
-# ── FB Ads Library fetch ───────────────────────────────────────────────────────
-def fetch_ads(query: str) -> list[dict]:
+# ── Anstrex native ad fetch ───────────────────────────────────────────────────
+def fetch_ads(keyword: str) -> list[dict]:
     """
-    Try FB Ads Library API. Falls back gracefully if unavailable.
-    Uses the access token if configured, otherwise tries the public endpoint.
+    Fetch native ads from Anstrex internal API.
+    sort_id=10 = Duration desc (longest-running first).
     """
     ads = []
-
-    # Primary: official API with token
-    if FB_ACCESS_TOKEN:
-        url = "https://graph.facebook.com/v19.0/ads_archive"
-        params = {
-            "access_token":   FB_ACCESS_TOKEN,
-            "search_terms":   query,
-            "ad_type":        "ALL",
-            "ad_active_status": "ACTIVE",
-            "limit":          10,
-            "fields":         "page_name,ad_creative_bodies,ad_delivery_start_time,ad_snapshot_url",
-            "search_countries": ["US"],
-        }
-        try:
-            r = requests.get(url, params=params, timeout=15)
-            r.raise_for_status()
-            data = r.json().get("data", [])
-            for ad in data:
-                bodies = ad.get("ad_creative_bodies") or []
-                body = bodies[0] if bodies else ""
-                ads.append({
-                    "advertiser":  ad.get("page_name", "Unknown"),
-                    "body":        body[:300],
-                    "start_date":  ad.get("ad_delivery_start_time", ""),
-                    "snapshot_url": ad.get("ad_snapshot_url", ""),
-                })
-            return ads
-        except Exception as e:
-            print(f"  [WARN] FB API failed: {e} — trying public endpoint")
-
-    # Fallback: public async search (limited, may not return data)
     try:
-        url = "https://www.facebook.com/ads/library/async/search_ads/"
-        params = {
-            "q":             query,
-            "ad_type":       "all",
-            "count":         10,
-            "active_status": "active",
-            "country":       "US",
-            "media_type":    "all",
-        }
-        headers = {"User-Agent": "AutoResearchClaw/1.9 competitor-research"}
-        r = requests.get(url, params=params, headers=headers, timeout=15)
+        r = requests.get(
+            "https://api.anstrex.com/api/v1/en/creative/search",
+            params={
+                "product_name":    "native",
+                "product_type":    "creative",
+                "keyword":         keyword,
+                "sort_id":         10,  # Duration desc
+                "page":            1,
+                "additional_data": "eyJpcCI6bnVsbH0=",
+            },
+            headers={
+                "Authorization": f"Bearer {ANSTREX_TOKEN}",
+                "Origin":        "https://native.anstrex.com",
+                "Referer":       "https://native.anstrex.com/",
+                "User-Agent":    "AutoResearchClaw/1.9",
+            },
+            timeout=20,
+        )
         r.raise_for_status()
-        # This endpoint may return JS-rendered data or a JSON payload
-        try:
-            data = r.json()
-            for key in ("data", "results", "ads", "payload"):
-                if isinstance(data.get(key), list):
-                    for ad in data[key]:
-                        ads.append({
-                            "advertiser":  ad.get("page_name", ad.get("advertiser_name", "Unknown")),
-                            "body":        (ad.get("ad_creative_body") or ad.get("body") or "")[:300],
-                            "start_date":  ad.get("ad_delivery_start_time", ad.get("start_date", "")),
-                            "snapshot_url": ad.get("ad_snapshot_url", ""),
-                        })
-                    break
-        except Exception:
-            pass
+        hits = r.json().get("hits", {}).get("hits", [])
+        for hit in hits[:10]:
+            src = hit.get("_source", {})
+            title = src.get("title", "")
+            sub_text = src.get("sub_text", "")
+            body = f"{title} — {sub_text}".strip(" —")
+            start_date = src.get("created_at", "")
+            networks = ", ".join(src.get("ad_network_names") or [])
+            geos = ", ".join(src.get("geo_names") or [])
+            lp_url = src.get("landing_page_url", "")
+            ads.append({
+                "advertiser":  lp_url[:50] or "Unknown",
+                "body":        body[:300],
+                "start_date":  start_date,
+                "snapshot_url": lp_url,
+                "networks":    networks,
+                "geos":        geos,
+            })
     except Exception as e:
-        print(f"  [WARN] Public endpoint failed: {e}")
-
+        print(f"  [WARN] Anstrex fetch failed for '{keyword}': {e}")
     return ads
 
 
@@ -210,11 +188,12 @@ def fire_discord(ad: dict, scored: dict, dry_run: bool):
         "description": (ad.get("body") or "(no copy)")[:500],
         "color":       color,
         "fields": [
-            {"name": "Hook Type",      "value": scored.get("hook_type", "?"),         "inline": True},
-            {"name": "Awareness Stage","value": str(scored.get("awareness_stage", "?")), "inline": True},
-            {"name": "Longevity",      "value": scored.get("longevity_signal", "?"),  "inline": True},
+            {"name": "Hook Type",      "value": scored.get("hook_type", "?"),              "inline": True},
+            {"name": "Awareness Stage","value": str(scored.get("awareness_stage", "?")),   "inline": True},
+            {"name": "Longevity",      "value": scored.get("longevity_signal", "?"),       "inline": True},
             {"name": "Threat",         "value": f"{'🔴' if threat == 'High' else '🟠'} {threat}", "inline": True},
-            {"name": "Analysis",       "value": scored.get("hook_summary", "")[:200], "inline": False},
+            {"name": "Networks",       "value": ad.get("networks", "Unknown") or "Unknown","inline": True},
+            {"name": "Analysis",       "value": scored.get("hook_summary", "")[:200],      "inline": False},
         ],
         "footer":    {"text": scored.get("vertical", "")},
         "timestamp": datetime.datetime.utcnow().isoformat(),

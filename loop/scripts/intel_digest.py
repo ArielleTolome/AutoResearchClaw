@@ -23,12 +23,13 @@ def load_config() -> dict:
         return yaml.safe_load(CFG_PATH.read_text()) or {}
     return {}
 
-CFG           = load_config()
-BASEROW_KEY   = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_API_KEY", ""))
-INTEL_WEBHOOK = CFG.get("discord", {}).get("intel_webhook_url", os.getenv("INTEL_WEBHOOK_URL", ""))
+CFG              = load_config()
+BASEROW_KEY      = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_TOKEN", "Yg1DSyEipxerKG9cuVJg6p6OjN0RTN4R"))
+BASEROW_BASE_URL = CFG.get("baserow", {}).get("url", "https://baserow.pfsend.com")
+INTEL_WEBHOOK    = CFG.get("discord", {}).get("intel_webhook_url", os.getenv("INTEL_WEBHOOK_URL", ""))
 
-NEWS_TABLE   = 767
-REDDIT_TABLE = 768
+NEWS_TABLE   = 767   # leadgen_industry_news (existing)
+REDDIT_TABLE = 818   # reddit_audience_signals (new)
 
 SENTIMENT_EMOJI = {
     "Very Bullish": "🚀", "Bullish": "📈", "Neutral": "➡️",
@@ -42,7 +43,7 @@ EMOTION_EMOJI = {
 
 def fetch_baserow(table_id: int, size: int = 50) -> list[dict]:
     """Fetch latest N rows from a Baserow table."""
-    url = f"https://api.baserow.io/api/database/rows/table/{table_id}/?user_field_names=true&order_by=-id&size={size}"
+    url = f"{BASEROW_BASE_URL}/api/database/rows/table/{table_id}/?user_field_names=true&order_by=-id&size={size}"
     try:
         r = requests.get(
             url,
