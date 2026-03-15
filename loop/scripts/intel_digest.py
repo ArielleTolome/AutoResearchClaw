@@ -43,7 +43,7 @@ EMOTION_EMOJI = {
 
 def fetch_baserow(table_id: int, size: int = 50) -> list[dict]:
     """Fetch latest N rows from a Baserow table."""
-    url = f"{BASEROW_BASE_URL}/api/database/rows/table/{table_id}/?user_field_names=true&order_by=-id&size={size}"
+    url = f"{BASEROW_BASE_URL}/api/database/rows/table/{table_id}/?user_field_names=true&size={size}"
     try:
         r = requests.get(
             url,
@@ -60,12 +60,12 @@ def fetch_baserow(table_id: int, size: int = 50) -> list[dict]:
 def build_embed(news_rows: list[dict], reddit_rows: list[dict], date_str: str) -> dict:
     total = len(news_rows) + len(reddit_rows)
 
-    # Top 3 news signals
+    # Top 3 news signals (Baserow field names use Title Case)
     news_bullets = []
     for row in news_rows[:3]:
-        vertical = row.get("vertical", "General")
-        sentiment = row.get("sentiment_impact", "Neutral")
-        headline = (row.get("headline") or row.get("title") or "")[:80]
+        vertical  = row.get("Vertical") or row.get("vertical", "General")
+        sentiment = row.get("Sentiment Impact") or row.get("sentiment_impact", "Neutral")
+        headline  = (row.get("Headline") or row.get("headline") or row.get("title") or "")[:80]
         emoji = SENTIMENT_EMOJI.get(sentiment, "➡️")
         news_bullets.append(f"**{vertical}** {emoji} — {headline}")
 
@@ -78,10 +78,10 @@ def build_embed(news_rows: list[dict], reddit_rows: list[dict], date_str: str) -
         emoji = EMOTION_EMOJI.get(emotion, "")
         reddit_bullets.append(f"_{hook}_ {emoji} — r/{sub}")
 
-    # Vertical pulse — combined count
+    # Vertical pulse — combined count (handle both Title Case and snake_case field names)
     all_verticals = (
-        [r.get("vertical", "Other") for r in news_rows] +
-        [r.get("vertical", "Other") for r in reddit_rows]
+        [(r.get("Vertical") or r.get("vertical") or "Other") for r in news_rows] +
+        [(r.get("vertical") or "Other") for r in reddit_rows]
     )
     vertical_counts = Counter(all_verticals).most_common(8)
     pulse_lines = [f"{v}: **{c}**" for v, c in vertical_counts]
