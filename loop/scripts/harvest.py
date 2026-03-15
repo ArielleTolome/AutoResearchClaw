@@ -155,6 +155,13 @@ def harvest(dry_run: bool = False) -> list[dict]:
     run_path.write_text(json.dumps(results, indent=2))
     print(f"[HARVEST] Saved to {run_path}")
 
+    result = {"ads": results}
+
+    # Intel harvest (multi-source)
+    if config.get("intel_harvest", {}).get("enabled", False):
+        intel = run_intel_harvest(config, dry_run=dry_run)
+        result["intel"] = intel
+
     return results
 
 
@@ -190,6 +197,70 @@ def mock_harvest_data() -> list[dict]:
             "cpm": 5.34,
         },
     ]
+
+
+def run_intel_harvest(config: dict, dry_run: bool = False) -> dict:
+    """
+    Pull competitive intel from all configured external sources.
+
+    Sources: Foreplay, Facebook Ads Library, YouTube hooks, Anstrex.
+    Each source is wrapped in try/except so a single failure won't block others.
+    """
+    from sources.foreplay_source import fetch_foreplay_ads
+    from sources.fb_ads_library_source import fetch_fb_ads
+    from sources.youtube_source import fetch_youtube_hooks
+    from sources.anstrex_source import fetch_anstrex_ads
+
+    niche = config.get("offer", {}).get("niche", "general")
+    platform = config.get("offer", {}).get("platform", "")
+    topic = f"{niche} {platform}".strip()
+
+    print(f"[INTEL] Running multi-source harvest for topic: '{topic}'")
+
+    combined = {}
+
+    # Foreplay
+    try:
+        combined["foreplay"] = fetch_foreplay_ads(config, topic, dry_run=dry_run)
+    except Exception as e:
+        print(f"[INTEL] Foreplay failed: {e}")
+        combined["foreplay"] = []
+
+    # Facebook Ads Library
+    try:
+        combined["fb_ads"] = fetch_fb_ads(config, topic, dry_run=dry_run)
+    except Exception as e:
+        print(f"[INTEL] FB Ads Library failed: {e}")
+        combined["fb_ads"] = []
+
+    # YouTube hooks
+    try:
+        combined["youtube"] = fetch_youtube_hooks(config, topic, dry_run=dry_run)
+    except Exception as e:
+        print(f"[INTEL] YouTube failed: {e}")
+        combined["youtube"] = []
+
+    # Anstrex
+    try:
+        anstrex_platform = config.get("anstrex", {}).get("platform", "native")
+        combined["anstrex"] = fetch_anstrex_ads(
+            config, topic, platform=anstrex_platform, dry_run=dry_run,
+        )
+    except Exception as e:
+        print(f"[INTEL] Anstrex failed: {e}")
+        combined["anstrex"] = []
+
+    # Summary
+    for src, ads in combined.items():
+        print(f"  {src}: {len(ads)} results")
+
+    # Save to file
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    intel_path = ROOT / "learnings" / f"intel_{ts}.json"
+    intel_path.write_text(json.dumps(combined, indent=2, default=str))
+    print(f"[INTEL] Saved to {intel_path}")
+
+    return combined
 
 
 if __name__ == "__main__":

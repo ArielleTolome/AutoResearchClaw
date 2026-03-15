@@ -221,7 +221,115 @@ def analyze(ads: list[dict], dry_run: bool = False) -> dict:
         "ranked": ranked,
     }, indent=2))
 
-    return {"winner": winner, "kill_list": kill_list, "analysis": analysis}
+    result = {"winner": winner, "kill_list": kill_list, "analysis": analysis}
+
+    # Intel analysis (multi-source)
+    if config.get("intel_harvest", {}).get("enabled", False):
+        intel_data = _load_latest_intel()
+        if intel_data:
+            intel_analysis = analyze_intel(intel_data, config)
+            result["intel_analysis"] = intel_analysis
+
+    return result
+
+
+def _load_latest_intel() -> dict | None:
+    """Load the most recent intel harvest JSON file."""
+    intel_files = sorted(ROOT.glob("learnings/intel_*.json"), reverse=True)
+    if not intel_files:
+        print("[ANALYZE] No intel harvest files found")
+        return None
+    latest = intel_files[0]
+    print(f"[ANALYZE] Loading intel from {latest.name}")
+    return json.loads(latest.read_text())
+
+
+def analyze_intel(intel_data: dict, config: dict) -> str:
+    """
+    Analyze competitive intel from multi-source harvest.
+    Calls Claude to extract patterns from Foreplay, FB Ads, YouTube, and Anstrex data.
+    """
+    prompts = load_prompts()
+    client = anthropic.Anthropic(api_key=config["llm"]["api_key"])
+
+    # Build summary of top performers from each source
+    sections = []
+
+    # YouTube hooks
+    yt_ads = intel_data.get("youtube", [])
+    if yt_ads:
+        hooks = "\n".join(
+            f"- [{ad.get('title', '')}] Hook: {ad.get('hook_text', '')[:200]}"
+            for ad in yt_ads[:10]
+        )
+        sections.append(f"## YouTube Hooks (first 60s transcripts)\n{hooks}")
+
+    # Facebook Ads Library
+    fb_ads = intel_data.get("fb_ads", [])
+    if fb_ads:
+        fb_sorted = sorted(fb_ads, key=lambda x: x.get("days_running", 0), reverse=True)
+        fb_lines = "\n".join(
+            f"- [{ad.get('page_name', '')}] ({ad.get('days_running', 0)}d) {ad.get('ad_body', '')[:200]}"
+            for ad in fb_sorted[:10]
+        )
+        sections.append(f"## Longest-Running FB Ads\n{fb_lines}")
+
+    # Foreplay
+    fp_ads = intel_data.get("foreplay", [])
+    if fp_ads:
+        fp_60plus = [a for a in fp_ads if a.get("running_days", 0) >= 60]
+        fp_list = fp_60plus[:10] if fp_60plus else fp_ads[:10]
+        fp_lines = "\n".join(
+            f"- [{ad.get('brand_name', '')}] ({ad.get('running_days', 0)}d) "
+            f"Headline: {ad.get('headline', '')} | {ad.get('full_transcription', '')[:150]}"
+            for ad in fp_list
+        )
+        sections.append(f"## Foreplay Ads (60+ days running)\n{fp_lines}")
+
+    # Anstrex
+    ax_ads = intel_data.get("anstrex", [])
+    if ax_ads:
+        ax_lines = "\n".join(
+            f"- [{ad.get('advertiser', '')}] ({ad.get('days_running', 0)}d) {ad.get('title', '')}"
+            for ad in ax_ads[:10]
+        )
+        sections.append(f"## Anstrex Native Headlines\n{ax_lines}")
+
+    if not sections:
+        print("[ANALYZE] No intel data to analyze")
+        return ""
+
+    intel_summary = "\n\n".join(sections)
+    niche = config.get("offer", {}).get("niche", "general")
+
+    user_prompt = (
+        f"Niche: {niche}\n\n"
+        f"COMPETITIVE INTEL DATA:\n\n{intel_summary}\n\n"
+        "Analyze this competitive intelligence and extract:\n"
+        "1. Top hook patterns from YouTube first-60s transcripts\n"
+        "2. Longest-running FB ad copy themes (what keeps running = what works)\n"
+        "3. Foreplay ad angles/headlines that have run 60+ days\n"
+        "4. Anstrex native headlines if available\n"
+        "5. Cross-source patterns: themes that appear in multiple sources\n\n"
+        "Be specific. Extract exact phrases, structures, and angles we can adapt."
+    )
+
+    print("[ANALYZE] Calling LLM for intel analysis...")
+    message = client.messages.create(
+        model=config["llm"]["model"],
+        max_tokens=2048,
+        system=prompts.get("analyze", "You are an expert ad creative analyst."),
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    analysis = message.content[0].text
+
+    # Save to file
+    ts = datetime.now().strftime("%Y%m%d")
+    analysis_path = ROOT / "learnings" / f"intel_analysis_{ts}.md"
+    analysis_path.write_text(f"# Intel Analysis — {ts}\n\n{analysis}\n")
+    print(f"[ANALYZE] Intel analysis saved to {analysis_path}")
+
+    return analysis
 
 
 if __name__ == "__main__":
