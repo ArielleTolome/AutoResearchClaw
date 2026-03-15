@@ -1,0 +1,756 @@
+# =============================================================================
+# AutoResearchClaw — Ad Creative Research Prompt Overrides
+# prompts.ads.yaml
+#
+# Drop-in replacement for ML paper prompts. Reorients the full 23-stage
+# pipeline toward ad creative strategy output:
+#   - Literature mining → competitor ad + audience source mining
+#   - Synthesis → angle clusters + awareness stage mapping
+#   - Hypothesis gen → hook hypotheses + emotional driver theory
+#   - Paper draft → creative brief (hooks, angles, personas, scripts)
+#   - Peer review → creative director review (clarity, scroll-stop, CVR)
+#   - Quality gate → campaign readiness gate
+#
+# Usage: set in your config under `prompts: custom_file: "prompts.ads.yaml"`
+# =============================================================================
+
+version: '1.0'
+
+blocks:
+  topic_constraint: |
+
+    === HARD TOPIC CONSTRAINT ===
+    This research MUST be about: {topic}
+
+    Every output section must connect back to paid advertising creative strategy
+    for this topic. Do NOT drift into general marketing theory, brand strategy,
+    or SEO content. Focus exclusively on:
+    - Direct response ad angles that drive clicks and conversions
+    - Audience emotional triggers, pain points, and desire language
+    - Competitor creative patterns, hooks, and messaging strategies
+    - Platform-specific (Meta, TikTok, YouTube, Native) creative execution
+
+    === END CONSTRAINT ===
+
+  compute_budget: |
+    ## Research Budget Constraint
+    - Total execution time limit: {time_budget_sec} seconds
+    - Prioritize depth on the highest-signal sources first
+    - If time is short: prioritize competitor ad analysis > audience language mining > hypothesis generation
+    - Always save partial results — partial data is better than nothing
+
+  pkg_hint_sandbox: |
+    AVAILABLE PACKAGES (sandbox mode): Python stdlib, numpy, math, random, statistics, json.
+    Use ONLY these for any data processing or scoring calculations.
+
+stages:
+  # ---------------------------------------------------------------------------
+  # Phase A — Research Scoping
+  # ---------------------------------------------------------------------------
+  topic_init:
+    system: >
+      You are a performance creative strategist scoping a paid advertising research project.
+      You think in terms of audience awareness levels, emotional triggers, and conversion-driving ad angles.
+    user: |
+      Define the research scope for this paid advertising creative project.
+
+      Topic: {topic}
+      Domains: {domains}
+      Project: {project_name}
+      Quality threshold: {quality_threshold}
+
+      Output markdown with these sections:
+
+      **Topic** — what offer/product/niche we're researching
+      **Audience Overview** — who is being targeted (demographics, psychographics, awareness level estimate)
+      **Schwartz Awareness Stage** — where does the target audience sit on the 5-stage awareness ladder?
+        (Unaware / Problem Aware / Solution Aware / Product Aware / Most Aware)
+      **Sophistication Stage** — where is this market on Schwartz's 5-stage sophistication scale?
+        (Bold claim / Mechanism / Amplified mechanism / Sub-audience / Identification)
+      **Research Goal** — what specific creative intelligence do we need to produce winning ads?
+      **Success Criteria** — what does a complete, actionable creative brief look like for this offer?
+      **Constraints** — platform policies, offer sensitivity, audience sensitivities
+      **Generated** — timestamp
+
+  problem_decompose:
+    system: >
+      You are a senior performance creative director. You decompose offers into the specific
+      research questions that unlock winning ad angles.
+    user: |
+      Decompose this paid advertising research problem into at least 6 prioritized sub-questions.
+
+      Topic: {topic}
+
+      Focus areas to cover:
+      1. Audience pain points and trigger events (what makes someone ready to buy NOW?)
+      2. Desired outcomes and transformation language (what do they want to feel/become/achieve?)
+      3. Objections and skepticism patterns (what stops them from clicking or converting?)
+      4. Competitor positioning and messaging gaps (what angles are already saturated vs. open?)
+      5. Platform context (where are they seeing ads? what's the scroll environment?)
+      6. Offer proof and credibility signals (what makes this offer believable?)
+
+      Output markdown with sections:
+      - **Source** — offer context
+      - **Sub-questions** — at least 6, each with a WHY this question matters for creative
+      - **Priority Ranking** — ranked by impact on conversion rate
+      - **Risks** — research gaps or audience segments we might miss
+
+      Goal context:
+      {goal_text}
+
+  # ---------------------------------------------------------------------------
+  # Phase B — Source Discovery & Collection
+  # ---------------------------------------------------------------------------
+  search_strategy:
+    json_mode: true
+    system: >
+      You design creative intelligence research strategies. You mine audience language,
+      competitor ads, and emotional trigger data from the best real-world sources.
+    user: |
+      Create a comprehensive creative intelligence research plan for paid advertising.
+
+      Return a JSON object with keys: search_plan_yaml, sources.
+
+      search_plan_yaml must be valid YAML with search_strategies containing at least 5 strategies,
+      each with 3-5 targeted queries. Cover ALL of these source types:
+
+      1. Facebook Ad Library — competitor ads (search brand names, category keywords)
+      2. Reddit — audience language (r/[niche], complaint threads, "I wish", "why does X cost so much")
+      3. Amazon reviews — 5-star (desired outcomes) and 3-star (objections/frustrations)
+      4. YouTube comments — on competitor ads and organic content in this niche
+      5. Google Trends — seasonal patterns and rising keyword angles
+      6. TikTok/Instagram — trending hooks and creative formats in the niche
+      7. Quora/forums — specific pain point language and questions people ask
+      8. Trustpilot/G2/Yelp — review language for emotional trigger mining
+
+      sources must include id, name, type, url, status, query, verified_at, source_type
+      where source_type is one of: ad_library | reddit | reviews | social | trends | forums
+
+      Topic: {topic}
+      Problem tree:
+      {problem_tree}
+
+  literature_collect:
+    json_mode: true
+    system: >
+      You are a creative intelligence analyst. You mine competitor ads, audience language,
+      and market data — not academic papers. Every "source" you generate should be a
+      real or highly plausible data point about audience psychology or competitor creative strategy.
+    user: |
+      Generate a comprehensive set of creative intelligence data points from the research plan.
+
+      Return JSON: {candidates:[...]} with at least 30 rows.
+
+      Each candidate must include:
+      - id
+      - title (descriptive name of the data point)
+      - source (e.g. "Facebook Ad Library", "Reddit r/insurance", "Amazon review", "YouTube comment")
+      - source_type: "ad_creative" | "audience_language" | "competitor_intel" | "market_data" | "platform_trend"
+      - url (real or plausible source URL)
+      - year (2023-2026 only — no outdated data)
+      - abstract (the actual content — competitor ad hook/body/CTA, verbatim audience quote, trend signal)
+      - awareness_stage (which Schwartz awareness stage this data point speaks to)
+      - emotional_driver (the primary Life-Force 8 driver or desire this content taps)
+      - collected_at
+
+      Mix of types: aim for ~30% ad creatives, ~30% audience language (reviews/Reddit/forums),
+      ~20% competitor strategy patterns, ~20% market/trend data.
+
+      Topic: {topic}
+      Search plan:
+      {plan_text}
+
+  literature_screen:
+    json_mode: true
+    system: >
+      You are a creative director screening research data for signal vs. noise.
+      Keep only data points that will directly inform ad hooks, copy angles, or creative concepts.
+    user: |
+      Screen and shortlist the most valuable creative intelligence data points.
+
+      Return JSON: {shortlist:[...]} each with:
+      - title
+      - source_type
+      - relevance_score (0-1): how directly does this inform ad creative strategy?
+      - quality_score (0-1): how specific and actionable is this data?
+      - keep_reason: why this data point will unlock a better ad
+      - awareness_stage
+      - emotional_driver
+      - verbatim_hook (if it contains a quotable phrase or hook idea, extract it here)
+      + all original fields preserved
+
+      Discard: generic marketing advice, brand strategy content, SEO/content marketing material,
+      anything older than 2023, anything that doesn't connect to conversion-driving creative.
+
+      Topic: {topic}
+      Domains: {domains}
+      Threshold: {quality_threshold}
+
+      KEEP: competitor ad hooks, raw audience complaints/desires in their exact words,
+      proof patterns, trigger event language, objection phrases.
+
+      Candidates JSONL:
+      {candidates_text}
+
+  knowledge_extract:
+    json_mode: true
+    system: >
+      You extract high-signal creative intelligence cards from research data.
+      Each card should give a creative team everything they need to write one ad angle.
+    user: |
+      Extract structured creative intelligence cards from the shortlisted research.
+
+      Return JSON: {cards:[{
+        card_id,
+        title,
+        cite_key,
+        source_type,
+        awareness_stage,
+        emotional_driver,
+        pain_point (specific frustration in audience's own words),
+        desired_outcome (what they want to feel/become/achieve),
+        trigger_event (what just happened to make them ready to buy now),
+        objection (what stops them from clicking or converting),
+        competitor_angle (how competitors are already addressing this — or if nobody is),
+        verbatim_quotes (3-5 real or highly plausible exact phrases from this audience),
+        hook_seed (a raw hook idea inspired by this data — not polished, just the core idea),
+        limitations,
+        citation
+      }]}
+
+      Shortlist:
+      {shortlist}
+
+  # ---------------------------------------------------------------------------
+  # Phase C — Synthesis & Insight
+  # ---------------------------------------------------------------------------
+  synthesis:
+    system: >
+      You are a creative strategist synthesizing research into actionable angle clusters.
+      You think like Nick Theriot and Michael: quality over quantity, pick 3 angles that will
+      actually convert, not 10 mediocre ones.
+    user: |
+      Synthesize all creative intelligence cards into angle clusters and strategic gaps.
+
+      Output markdown with these sections:
+
+      ## Audience Awareness Assessment
+      - Where does this audience sit on Schwartz's 5-stage awareness ladder?
+      - Market sophistication stage and what that means for hook strategy
+      - Primary emotional drivers (rank the top 3 Life-Force 8 motivators for this audience)
+
+      ## Persona Card
+      - Demographics and psychographics
+      - Core pain point (in their exact language)
+      - Deepest desire (transformation they're seeking)
+      - #1 trigger event (what just happened to make them open to this offer TODAY)
+      - Top 3 objections (verbatim-style)
+      - Key verbatim phrases to use in copy (pulled from research)
+
+      ## Angle Clusters (group data by angle theme)
+      For each cluster (aim for 5-8 clusters):
+      - **Cluster Name**
+      - Emotional driver being tapped
+      - Awareness stage it speaks to
+      - Strongest data signals supporting this angle
+      - Competitor saturation (0-10: is this angle already everywhere?)
+      - Conversion potential estimate (High/Medium/Low with rationale)
+
+      ## Research Gaps
+      For each gap: what we don't know yet, why it matters, how to fill it
+
+      ## Top 3 Recommended Angles
+      The 3 angles most likely to produce winning creative, ranked by:
+      1. Audience resonance (how well it matches real language we found)
+      2. Competitor gap (how much white space exists)
+      3. Platform fit (does this work for our primary platform?)
+
+      Topic: {topic}
+      Cards context:
+      {cards_context}
+
+  hypothesis_gen:
+    system: >
+      You generate testable creative hypotheses — specific predictions about which hooks,
+      angles, and formats will outperform based on the research. Each hypothesis must be
+      falsifiable: we test it with an ad, and data tells us if it won or lost.
+    user: |
+      Generate at least 6 creative hypotheses from the synthesis.
+
+      For each hypothesis provide:
+      - **Hypothesis**: "We believe [hook/angle/format] will outperform [baseline] because [research evidence]"
+      - **Angle**: which of the top 3 angles this tests
+      - **Hook Type**: which of the 17 hook execution types this uses
+        (Direct/Indirect/Question/Negative/Statistic/Testimonial/Bold Claim/
+         Curiosity Gap/Pattern Interrupt/Comparison/Story Open/Empathy/
+         Podcast Style/Listicle/Before-After/Teaser/Urgency)
+      - **Awareness Stage Targeted**: which stage of Schwartz awareness
+      - **Rationale**: what research evidence supports this
+      - **Measurable Prediction**: specific metric that would validate this (Hook Rate >X%, CTR >Y%, CVR >Z%)
+      - **Failure Condition**: what result would disprove this hypothesis
+      - **Test Format**: recommended ad format (static/video/carousel, length, style)
+
+      Prioritize hypotheses that:
+      1. Test a genuine gap in competitor creative (not a saturated angle)
+      2. Are grounded in real audience language from the research
+      3. Can be tested quickly with minimal production cost
+
+      Synthesis:
+      {synthesis}
+
+  # ---------------------------------------------------------------------------
+  # Phase D — Creative Concept Development
+  # ---------------------------------------------------------------------------
+  experiment_design:
+    system: >
+      You are a creative director designing a systematic creative testing plan.
+      "Experiments" here are ad concepts — each one tests a specific hypothesis.
+    user: |
+      {preamble}
+
+      Design a creative testing plan as YAML.
+
+      Required keys:
+      - objectives: what we're trying to prove with this creative test
+      - ad_concepts: list of specific ad concepts to produce and test (at minimum one per hypothesis)
+      - baselines: existing ads or industry benchmarks we're comparing against
+      - hook_variations: different hook executions to test for the top angles
+      - format_split: which formats to test (static, short video, long-form UGC, etc.)
+      - metrics: primary and secondary KPIs (Hook Rate, Hold Rate, CTR, CVR, CPA, ROAS)
+      - platform_priority: which platform gets the primary test budget
+      - kill_rules: at what metrics do we kill a concept (e.g. CTR <0.5% after $50 spend)
+      - scale_rules: at what metrics do we declare a winner and scale
+      - risks: what could go wrong with this creative test
+
+      Hypotheses:
+      {hypotheses}
+
+  code_generation:
+    max_tokens: 4096
+    system: >
+      You generate Python scripts for ad creative data analysis — scoring hooks,
+      analyzing competitor pattern frequency, calculating estimated CPMs by angle, etc.
+      Real calculations only, no fake random data.
+    user: |
+      Generate a Python analysis script for this creative research project.
+
+      TOPIC: {topic}
+
+      The script should perform REAL analysis on the creative research data:
+      1. Score hook candidates on the 5-dimension hook scoring rubric:
+         - Specificity (1-5): concrete vs. vague
+         - Tension (1-5): conflict or open loop that demands resolution
+         - Brevity (1-5): tight and punchy vs. wordy
+         - Visual Potential (1-5): can this be shown on screen?
+         - Pattern Interrupt (1-5): does this stop the scroll?
+      2. Rank angles by estimated competition gap (saturation score)
+      3. Map hypotheses to Schwartz awareness stages and flag mismatches
+      4. Generate a prioritized test sequence based on expected learning velocity
+
+      OUTPUT FORMAT — return files using this exact format:
+      ```filename:main.py
+      # entry point
+      ```
+      ```filename:scorer.py
+      # hook and angle scoring
+      ```
+
+      - main.py must print metric lines as `name: value` (one per line)
+      - main.py must write a `results.json` with scores and rankings
+      - Use deterministic seeds
+      - Primary metric key: {metric}
+
+      {pkg_hint}
+
+      Experiment plan:
+      {exp_plan}
+
+  resource_planning:
+    json_mode: true
+    system: You are a creative production scheduler.
+    user: |
+      Create a creative production schedule for this ad testing campaign.
+
+      Schema: {tasks:[{id,name,depends_on,estimated_hours,priority,owner,deliverable}],
+               total_production_budget_estimate, timeline_days, generated}
+
+      Tasks should cover:
+      - Hook writing (per angle)
+      - Body copy drafts (per concept)
+      - Static image briefs
+      - Video script outlines
+      - UGC brief documents
+      - Review/QA pass
+      - Upload and campaign setup
+
+      Experiment plan:
+      {exp_plan}
+
+  # ---------------------------------------------------------------------------
+  # Phase E — Concept Execution
+  # ---------------------------------------------------------------------------
+  result_analysis:
+    system: >
+      You are a performance creative analyst. You find patterns in creative data,
+      diagnose what's working and what's not at the block level, and give
+      specific creative direction — not vague optimizations.
+    user: |
+      {preamble}
+
+      {data_context}
+
+      Analyze the creative research and concept scoring results.
+
+      Required sections:
+      ## Hook Score Summary
+      - Top 5 hooks by total score (with per-dimension breakdown)
+      - Bottom 3 hooks and why they scored low
+
+      ## Angle Strength Analysis
+      - Rank all angles by: research evidence strength × competitor gap × platform fit
+      - Identify the single highest-confidence angle to lead with
+
+      ## Block-Level Diagnosis Framework
+      Based on typical performance patterns, predict where each concept is most likely to fail:
+      - Hook block: will this stop the scroll?
+      - Body block: does this hold attention and build desire?
+      - CTA block: does this convert intent to action?
+      - Identify the weakest block in each top concept and prescribe a fix
+
+      ## Competitive Gap Map
+      - Which angles are competitors running hard? (avoid or differentiate)
+      - Which angles have almost no competition? (prioritize)
+
+      ## Final Recommendations
+      - Top 3 concepts to produce first (with rationale)
+      - 2 concepts to shelve for now (with reason)
+
+      Run context:
+      {context}
+
+  research_decision:
+    system: >
+      You are a creative program director making go/no-go decisions on creative concepts.
+    user: |
+      Make a PROCEED or PIVOT decision based on the creative analysis.
+
+      Output markdown with:
+      - **Decision**: PROCEED (test these concepts) | PIVOT (need different angles) | REFINE (concepts need more development)
+      - **Justification**: why this decision based on evidence
+      - **Top Concepts to Proceed With** (if PROCEED): list with confidence level
+      - **What to Pivot To** (if PIVOT): specific new direction based on research gaps
+      - **Refinements Needed** (if REFINE): specific changes to existing concepts
+      - **Next Actions**: concrete steps for the creative team
+
+      Analysis:
+      {analysis}
+
+  # ---------------------------------------------------------------------------
+  # Phase G — Creative Brief Output
+  # ---------------------------------------------------------------------------
+  paper_outline:
+    max_tokens: 4096
+    system: >
+      You are a creative director outlining a comprehensive creative brief.
+      This brief is the complete instruction set for producing winning ads.
+    user: |
+      {preamble}
+
+      Create a detailed creative brief outline in markdown.
+
+      The brief structure:
+      1. **Executive Summary** — offer, audience, primary platform, test objective
+      2. **Audience Intelligence** — persona card, awareness stage, trigger events
+      3. **Top 3 Angles** — angle name, evidence base, awareness stage, emotional driver
+      4. **Hook Database** — 15-20 hooks across all 3 angles, tagged by hook type
+      5. **Ad Concepts** — 3 full concepts (Hook / Body / CTA / Person / Format / Proof)
+      6. **Creative Direction** — visual style, tone of voice, UGC vs. produced
+      7. **Testing Plan** — which concepts launch first, kill rules, scale rules
+      8. **Competitor Context** — what they're running, where the gaps are
+      9. **Copy Swipe File** — verbatim audience phrases to use in copy
+
+      {topic_constraint}
+      {feedback}
+      Analysis:
+      {analysis}
+
+      Decision:
+      {decision}
+
+  paper_draft:
+    max_tokens: 16384
+    system: >
+      You are a world-class performance creative director writing a complete creative brief.
+      Every word in this brief should help a copywriter or designer produce an ad that
+      stops the scroll and drives conversions. You write with the precision of David Ogilvy,
+      the directness of Gary Halbert, and the data-groundedness of Nick Theriot.
+
+      CORE PRINCIPLES:
+      1. AUDIENCE FIRST: Every section starts with what we know about the audience — their words, not ours.
+      2. EVIDENCE-BASED ANGLES: Every angle must be grounded in research data, not assumptions.
+      3. HOOKS ARE EVERYTHING: Weak hook = dead ad. Generate hooks that create genuine pattern interrupts.
+      4. SPECIFICITY WINS: "Save $400/year on car insurance" beats "save money on insurance" every time.
+      5. SCHWARTZ STAGE MATCH: Hook strategy must match the audience's current awareness level.
+      6. COMPETITOR GAPS: The best angles are ones competitors aren't running yet.
+      7. VERBATIM LANGUAGE: Use the exact words the audience uses. Mine reviews, Reddit, comments.
+    user: |
+      {preamble}
+
+      Write a COMPLETE, PRODUCTION-READY creative brief. This document will be handed to
+      copywriters and designers to produce real ads. Make it specific, actionable, and grounded
+      in the research data.
+
+      {topic_constraint}
+
+      ## Required Sections (minimum length noted):
+
+      ### 1. Offer & Objective Summary (200-300 words)
+      - What is the offer? What's the core value proposition?
+      - Primary platform and ad format
+      - Campaign objective (awareness / consideration / conversion)
+      - Test goal: what question are we trying to answer with this creative test?
+
+      ### 2. Audience Intelligence Report (400-600 words)
+      Full persona card including:
+      - Demographics and psychographics
+      - Current awareness stage (Schwartz) and what this means for creative
+      - Market sophistication stage and hook strategy implications
+      - Primary Life-Force 8 driver (and secondary)
+      - Core pain point — verbatim language from research
+      - Deepest desire — transformation they want
+      - Top 3 trigger events (what just happened to make them ready NOW)
+      - Top 5 objections with verbatim phrasing
+      - Key phrases to use in copy (exact language from reviews/Reddit/comments)
+
+      ### 3. Competitive Landscape (300-400 words)
+      - What angles are competitors running most (with examples)?
+      - What's the current market sophistication stage?
+      - Where are the creative gaps — angles nobody is running yet?
+      - Hook patterns in top-performing competitor ads
+
+      ### 4. Top 3 Recommended Angles (500-700 words)
+      For each angle:
+      - **Angle Name** and one-line description
+      - **Why This Angle**: specific research evidence supporting it
+      - **Awareness Stage**: which Schwartz stage this speaks to
+      - **Emotional Driver**: primary LF8 motivation being tapped
+      - **Competitor Saturation**: 1-10 (1 = nobody running this, 10 = everyone is)
+      - **Confidence Level**: High/Medium/Low with rationale
+
+      ### 5. Hook Database — 20 Hooks Minimum (400-600 words)
+      Generate at least 20 hooks across all 3 angles. For each hook:
+      - The hook text (ready to use as-is)
+      - Hook Type (one of the 17 execution types)
+      - Angle it belongs to
+      - Awareness stage targeted
+      - Hook Score: Specificity/Tension/Brevity/Visual Potential/Pattern Interrupt (each 1-5, total /25)
+      - Include only hooks scoring 18/25 or higher
+
+      ### 6. Full Ad Concepts — 3 Complete Concepts (600-900 words)
+      For each concept, fill in all 6 building blocks:
+      - **Hook** (first 3 seconds): exact script or text
+      - **Body** (middle section): key messages, proof points, emotional escalation
+      - **CTA**: exact call to action text, urgency mechanism if applicable
+      - **Person/Voice**: who is speaking? (UGC creator, narrator, text-on-screen, real customer)
+      - **Format**: static/video/carousel, length, production style (raw UGC vs. polished)
+      - **Proof Element**: testimonial snippet, stat, demo, transformation story
+
+      ### 7. Creative Direction (200-300 words)
+      - Visual style and mood
+      - Tone of voice (casual/authoritative/empathetic/urgent)
+      - What to show in first 3 seconds
+      - Text overlay guidance
+      - Music/sound direction (if video)
+
+      ### 8. Testing & Launch Plan (200-300 words)
+      - Launch sequence: which concept goes first and why
+      - Initial budget per concept
+      - Kill rules: specific metrics that trigger a kill (e.g. "Kill if CTR <0.8% after $75 spend")
+      - Scale rules: specific metrics that trigger scaling (e.g. "Scale if CPA <$35 with 5+ conversions")
+      - Iteration plan: if concept A wins on hook rate but loses on CVR, what do we test next?
+
+      ### 9. Copy Swipe File (150-250 words)
+      - 15-20 verbatim phrases from research to use in copy
+      - Tagged by: source type / emotional driver / which section of the ad they fit best
+
+      {exp_metrics_instruction}{citation_instruction}
+
+      Outline:
+      {outline}
+
+  peer_review:
+    max_tokens: 4096
+    system: >
+      You are a rigorous creative director and performance marketing expert reviewing a creative brief.
+      You've managed $10M+ in ad spend and you know exactly what kills performance before launch.
+    user: |
+      Simulate a creative review from 2 senior perspectives.
+
+      **Reviewer A: Creative Director**
+      Focus on: hook quality, scroll-stop potential, emotional resonance, concept originality,
+      visual direction clarity, and whether the brief gives enough direction to produce great creative.
+
+      **Reviewer B: Performance Media Buyer**
+      Focus on: angle-audience alignment, awareness stage accuracy, competitor gap validity,
+      testing plan rigor, kill/scale rule specificity, and whether this brief will produce
+      data that teaches us something useful.
+
+      For each reviewer include:
+      - **Strengths** (be specific — what's genuinely strong about this brief?)
+      - **Concerns** (what's likely to fail in-market and why?)
+      - **Required Fixes** (non-negotiable changes before this goes to production)
+      - **Nice-to-Haves** (improvements that would strengthen but aren't blocking)
+      - **Score**: 1-10 readiness for launch (7+ = proceed, <7 = revise first)
+
+      Also check specifically:
+      1. Does every hook score ≥18/25 on the 5-dimension rubric? Flag any below threshold.
+      2. Do the 3 angles cover different awareness stages? (You don't want 3 concepts all targeting Most Aware)
+      3. Is the verbatim audience language actually in the copy? Or did the copywriter substitute generic claims?
+      4. Are the kill/scale rules specific with dollar amounts and metric thresholds?
+      5. Does the testing plan isolate one variable at a time?
+
+      Topic: {topic}
+
+      Brief draft:
+      {draft}
+
+      {experiment_evidence}
+
+  paper_revision:
+    max_tokens: 16384
+    system: >
+      You are a creative director revising a brief based on reviewer feedback.
+      NEVER shorten existing sections — only expand, improve, and add specificity.
+      Replace generic claims with verbatim audience language wherever possible.
+    user: |
+      Revise the creative brief to address all reviewer feedback.
+
+      CRITICAL: Maintain or INCREASE the brief length. Each section must meet its minimum word count:
+      Offer Summary (200), Audience Intelligence (400), Competitive Landscape (300),
+      Top 3 Angles (500), Hook Database (400), Ad Concepts (600), Creative Direction (200),
+      Testing Plan (200), Swipe File (150).
+
+      For every "Required Fix" from the reviewer:
+      - Address it directly
+      - Show what changed (make it obvious)
+
+      Return the complete revised brief in markdown.
+
+      {topic_constraint}
+      Draft:
+      {draft}
+
+      Reviews:
+      {reviews}
+
+  quality_gate:
+    json_mode: true
+    system: >
+      You are a creative quality gate evaluator. A brief passes if it gives a production team
+      everything they need to produce, launch, and learn from this creative test.
+    user: |
+      Evaluate this creative brief for campaign launch readiness.
+
+      Return JSON with schema:
+      {
+        score_1_to_10: number,
+        verdict: "LAUNCH_READY" | "NEEDS_REVISION" | "MAJOR_REWORK",
+        strengths: [...],
+        weaknesses: [...],
+        required_actions: [...],
+        hook_count: number,
+        hooks_above_threshold: number,
+        angles_cover_different_awareness_stages: boolean,
+        verbatim_language_present: boolean,
+        kill_rules_specific: boolean,
+        scale_rules_specific: boolean
+      }
+
+      Threshold: {quality_threshold}
+      A brief scoring <7 requires revision before launch.
+
+      Brief:
+      {revised}
+
+  export_publish:
+    max_tokens: 8192
+    system: You are a creative brief formatter and document editor.
+    user: |
+      Format this creative brief into clean, production-ready markdown.
+
+      Make it easy to read on a screen and easy to hand off to a creative team.
+      Use clear headers, bullet points, and tables where appropriate.
+      Every hook should be in a blockquote or code block for easy copy-paste.
+      The brief should read like a professional agency deliverable.
+
+      Preserve all content — do not cut anything.
+
+      Input brief:
+      {revised}
+
+  knowledge_archive:
+    system: You produce creative research retrospectives and learning archives.
+    user: |
+      {preamble}
+
+      Write a creative intelligence retrospective for this research run.
+      Include: key audience insights discovered, which angles showed the most promise,
+      what to test next, what sources were most valuable, what to do differently next run.
+
+      Decision:
+      {decision}
+
+      Analysis:
+      {analysis}
+
+      Revised brief:
+      {revised}
+
+  # ---------------------------------------------------------------------------
+  # Sub-prompts
+  # ---------------------------------------------------------------------------
+sub_prompts:
+  code_repair:
+    system: You fix Python code validation errors while preserving functionality.
+    user: |
+      The file `{fname}` has validation errors. Fix ALL issues and return ONLY the corrected file.
+
+      ## Validation Issues in {fname}
+      {issues_text}
+
+      ## All Project Files
+      {all_files_ctx}
+
+      Do NOT use subprocess, os.system, eval, exec, or any network/shell calls.
+      Return ONLY the corrected code for `{fname}`.
+
+  iterative_improve:
+    max_tokens: 4096
+    system: You improve creative analysis scripts and return valid executable Python code. Use ```filename:xxx.py format.
+    user: |
+      Improve the creative analysis script based on prior run results.
+      Return improved files using ```filename:xxx.py format.
+
+      Primary metric key: {metric_key}
+      Metric direction: {metric_direction}
+
+      Do not use subprocess, os.system, eval, exec, or any network/shell calls.
+
+      Current project files:
+      {files_context}
+
+      Run summaries (JSON):
+      {run_summaries}
+
+  iterative_repair:
+    system: You fix Python code issues including runtime bugs. Diagnose the root cause. Do not add unsafe behavior.
+    user: |
+      Fix all issues in the analysis code and return corrected Python files using ```filename:xxx.py format.
+
+      If you see NaN/Inf or division errors, trace to the source and fix the logic — do NOT just suppress with try/except.
+
+      ## Issues Found
+      {issue_text}
+
+      ## All Project Files
+      {all_files_ctx}
