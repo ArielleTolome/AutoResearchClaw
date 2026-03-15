@@ -88,7 +88,17 @@ youtube:
 
 # ── Anstrex ───────────────────────────────────────────────────────────────────
 anstrex:
-  username: "YOUR_ANSTREX_EMAIL"
-  password: "YOUR_ANSTREX_PASSWORD"
-  platform: "native"
-  session_cookies: ""
+  bearer_token: "YOUR_ANSTREX_BEARER_TOKEN"  # From browser DevTools: Authorization header on native.anstrex.com
+  platform: "native"            # native | push | pops
+  min_running_days: 30          # Only return ads running this many days+
+
+
+# ─────────────────────────────────────────────
+# Baserow (intel memory + creative brief store)
+# ─────────────────────────────────────────────
+baserow:
+  enabled: false
+  email: "YOUR_BASEROW_EMAIL"
+  password: "YOUR_BASEROW_PASSWORD"
+  # Table IDs (pre-created in AutoResearchClaw database):
+  #   intel_ads: 813 | hooks: 814 | creative_briefs: 815 | loop_results: 816
