@@ -30,10 +30,17 @@ def _extract(pattern: str, text: str, default: str = "—") -> str:
     return match.group(1).strip() if match else default
 
 
-def post_challenger_to_discord(challenger_brief: str, config: dict) -> str:
+def post_challenger_to_discord(
+    challenger_brief: str,
+    config: dict,
+    score_result: dict | None = None,
+    fatigue_results: dict | None = None,
+) -> str:
     """
     Post the challenger to Discord for approval.
     Returns the message_id of the posted message.
+
+    Optionally includes prediction score and angle fatigue heatmap in the embed.
     """
     gate_cfg = config.get("approval_gate", {})
     bot_token = gate_cfg.get("bot_token", "")
@@ -47,12 +54,28 @@ def post_challenger_to_discord(challenger_brief: str, config: dict) -> str:
     timeout_hours = gate_cfg.get("timeout_hours", 4)
     timeout_action = gate_cfg.get("timeout_action", "kill")
 
+    # --- Build prediction block ---
+    prediction_block = ""
+    if score_result:
+        from prediction_scorer import format_score_for_discord
+        prediction_block = f"\n\n**📊 Pre-Deploy Prediction**\n{format_score_for_discord(score_result)}"
+
+    # --- Build fatigue block ---
+    fatigue_block = ""
+    if fatigue_results:
+        from angle_fatigue import format_fatigue_for_discord
+        top_angles = format_fatigue_for_discord(fatigue_results)
+        if top_angles:
+            fatigue_block = f"\n\n**🌡️ Angle Fatigue**\n{top_angles}"
+
     content = (
         "**🎯 New Challenger Ready for Approval**\n\n"
         f"**Name:** `{name}`\n"
         f"**Angle:** {angle}\n"
         f"**Hypothesis:** {hypothesis[:200]}\n\n"
-        f"**Hook:** \"{hook[:150]}\"\n\n"
+        f"**Hook:** \"{hook[:150]}\""
+        f"{prediction_block}"
+        f"{fatigue_block}\n\n"
         "React with ✅ to **deploy** or ❌ to **reject**.\n"
         f"⏰ Auto-{timeout_action} in {timeout_hours}h if no reaction."
     )
@@ -122,10 +145,19 @@ def _log_gate_decision(message_id: str, decision: str, config: dict):
         f.write(entry)
 
 
-def run_gate(challenger_brief: str, dry_run: bool = False) -> bool:
+def run_gate(
+    challenger_brief: str,
+    dry_run: bool = False,
+    score_result: dict | None = None,
+    fatigue_results: dict | None = None,
+) -> bool:
     """
     Run the full approval gate.
     Returns True if challenger should be deployed, False otherwise.
+
+    Args:
+        score_result: Optional output from prediction_scorer.score_creative()
+        fatigue_results: Optional output from angle_fatigue.score_angle_fatigue()
     """
     config = load_config()
     gate_cfg = config.get("approval_gate", {})
@@ -138,7 +170,11 @@ def run_gate(challenger_brief: str, dry_run: bool = False) -> bool:
         print("[GATE] DRY RUN - auto-approving")
         return True
 
-    message_id = post_challenger_to_discord(challenger_brief, config)
+    message_id = post_challenger_to_discord(
+        challenger_brief, config,
+        score_result=score_result,
+        fatigue_results=fatigue_results,
+    )
     result = poll_for_reaction(message_id, config)
     timeout_action = gate_cfg.get("timeout_action", "kill")
 

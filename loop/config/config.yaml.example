@@ -66,6 +66,22 @@ approval_gate:
   timeout_hours: 4                  # Hours to wait before applying timeout_action
   timeout_action: "kill"            # kill | deploy | skip_and_continue
   poll_interval_seconds: 60         # How often to check for reactions
+  # Gate embeds now include prediction score + angle fatigue heatmap automatically
+
+# ── Prediction Scorer ─────────────────────────────────────────────────────────
+prediction:
+  enabled: true                     # Score challenger before approval gate
+  min_score_to_deploy: 0            # 0 = always proceed; set to 14 to block weak creatives
+  # Scores use 25-point rubric: hook_clarity + tension_desire + angle_freshness
+  # + awareness_match + pattern_interrupt
+  # Predicted hook rate ranges: 22-25→35-45% | 18-21→25-35% | 14-17→15-25% | <14→iterate
+
+# ── Angle Fatigue ─────────────────────────────────────────────────────────────
+angle_fatigue:
+  enabled: true                     # Run fatigue analysis before generate step
+  # Tiers: FRESH (<25) | WARMING (25-50) | SATURATED (51-75) | DEAD (>75)
+  # Fatigue context is injected into generate prompt to steer away from DEAD angles
+  # Pulls intel from Baserow (if enabled) or local intel JSON files
 
 # ── Intel Harvest (Multi-Source) ─────────────────────────────────────────────
 intel_harvest:

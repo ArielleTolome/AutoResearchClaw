@@ -112,7 +112,7 @@ def recall_from_qdrant(offer_context: str, config: dict) -> str:
     return "\n".join(chunks)
 
 
-def generate_challenger(winner: dict | None, dry_run: bool = False) -> str:
+def generate_challenger(winner: dict | None, dry_run: bool = False, fatigue_context: str = "") -> str:
     config = load_config()
     prompts = load_prompts()
 
@@ -133,6 +133,10 @@ def generate_challenger(winner: dict | None, dry_run: bool = False) -> str:
     if qdrant_memories:
         qdrant_block = f"--- QDRANT MEMORY RECALL (cross-campaign patterns) ---\n{qdrant_memories}\n\n"
 
+    fatigue_block = ""
+    if fatigue_context:
+        fatigue_block = f"--- ANGLE FATIGUE (avoid DEAD, prefer FRESH/WARMING) ---\n{fatigue_context}\n\n"
+
     user_prompt = (
         f"OFFER: {offer['name']}\n"
         f"NICHE: {offer['niche']}\n"
@@ -141,9 +145,11 @@ def generate_challenger(winner: dict | None, dry_run: bool = False) -> str:
         f"--- CURRENT BASELINE ---\n{baseline}\n\n"
         f"--- ACCUMULATED LEARNINGS ---\n{learnings}\n\n"
         f"{qdrant_block}"
+        f"{fatigue_block}"
         f"--- CREATIVE FRAMEWORKS ---\n{frameworks}\n\n"
         "Write the next challenger creative. Make ONE meaningful change. "
-        "Ground it in the learnings. Don't repeat what's already failed."
+        "Ground it in the learnings. Don't repeat what's already failed. "
+        "Avoid angles marked DEAD in the fatigue data — prioritize FRESH and WARMING angles."
     )
 
     if dry_run:
