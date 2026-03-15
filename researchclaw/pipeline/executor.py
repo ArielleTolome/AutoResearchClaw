@@ -1022,12 +1022,23 @@ def _execute_topic_init(
     )
     if llm is not None:
         _pm = prompts or PromptManager()
+        # Build platform context block for ads mode
+        _platform_block = ""
+        if config.prompts.custom_file and "ads" in config.prompts.custom_file.lower():
+            try:
+                from researchclaw.data.ads_fetcher import build_platform_block
+                _platform_block = build_platform_block(
+                    getattr(config.research, "platform", "meta")
+                )
+            except Exception:  # noqa: BLE001
+                pass
         sp = _pm.for_stage(
             "topic_init",
             topic=topic,
             domains=domains,
             project_name=config.project.name,
             quality_threshold=config.research.quality_threshold,
+            platform_context=_platform_block,
         )
         resp = llm.chat(
             [{"role": "user", "content": sp.user}],
@@ -1426,8 +1437,82 @@ def _execute_literature_collect(
     llm: LLMClient | None = None,
     prompts: PromptManager | None = None,
 ) -> StageResult:
-    """Stage 4: Collect literature — prefer real APIs, fallback to LLM."""
+    """Stage 4: Collect literature — prefer real APIs, fallback to LLM.
+
+    In ads mode (prompts.custom_file points to prompts.ads.yaml), the real
+    API path is replaced by live ad creative intelligence fetching:
+    Reddit audience language, Amazon review snippets, FB Ad Library proxy,
+    competitor intel, and trend signals.  Falls back to LLM synthesis if
+    live fetching yields no results.
+    """
     topic = config.research.topic
+
+    # Detect ads mode by checking if custom prompts file is ads-oriented
+    _is_ads_mode = bool(
+        config.prompts.custom_file
+        and "ads" in config.prompts.custom_file.lower()
+    )
+
+    # --- ADS MODE: fetch live creative intelligence first ---
+    if _is_ads_mode:
+        platform = getattr(config.research, "platform", "meta") if hasattr(config.research, "platform") else "meta"
+        # Fall back to reading platform from raw config via the prompts custom_file path
+        # (platform is stored in research.domains[0] if it starts with "platform:")
+        for domain in (config.research.domains or ()):
+            if isinstance(domain, str) and domain.startswith("platform:"):
+                platform = domain.split(":", 1)[1].strip()
+                break
+
+        try:
+            from researchclaw.data.ads_fetcher import fetch_ads_intelligence
+            logger.info(
+                "Stage 4 (ads mode): fetching live creative intelligence "
+                "(topic=%r, platform=%s)...",
+                topic,
+                platform,
+            )
+            use_web = config.openclaw_bridge.use_web_fetch
+            live_candidates = fetch_ads_intelligence(
+                topic,
+                platform=platform,
+                use_web_fetch=use_web,
+            )
+            if live_candidates:
+                (stage_dir / "candidates.jsonl").parent.mkdir(parents=True, exist_ok=True)
+                out = stage_dir / "candidates.jsonl"
+                _write_jsonl(out, live_candidates)
+                # Write fetch metadata
+                (stage_dir / "search_meta.json").write_text(
+                    json.dumps(
+                        {
+                            "mode": "ads_live_fetch",
+                            "platform": platform,
+                            "real_search": True,
+                            "total_candidates": len(live_candidates),
+                            "bibtex_entries": 0,
+                            "ts": _utcnow_iso(),
+                            "sources": list({c.get("source_type", "unknown") for c in live_candidates}),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                return StageResult(
+                    stage=Stage.LITERATURE_COLLECT,
+                    status=StageStatus.DONE,
+                    artifacts=("candidates.jsonl", "search_meta.json"),
+                    evidence_refs=("stage-04/candidates.jsonl", "stage-04/search_meta.json"),
+                )
+            else:
+                logger.warning(
+                    "Stage 4 (ads mode): live fetch returned no results — "
+                    "falling through to LLM synthesis"
+                )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Stage 4 (ads mode): live fetch failed — falling through to LLM synthesis",
+                exc_info=True,
+            )
 
     # Read queries.json from Stage 3 (F1.5 output)
     queries_text = _read_prior_artifact(run_dir, "queries.json")

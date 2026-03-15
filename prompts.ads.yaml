@@ -17,6 +17,10 @@
 version: '1.0'
 
 blocks:
+  platform_context: |
+
+    {platform_block}
+
   topic_constraint: |
 
     === HARD TOPIC CONSTRAINT ===
@@ -71,6 +75,8 @@ stages:
       **Success Criteria** — what does a complete, actionable creative brief look like for this offer?
       **Constraints** — platform policies, offer sensitivity, audience sensitivities
       **Generated** — timestamp
+
+      {platform_context}
 
   problem_decompose:
     system: >
