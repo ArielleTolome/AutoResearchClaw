@@ -484,7 +484,8 @@ class TestAnnotatePaperHallucinations:
         )
         result = annotate_paper_hallucinations(paper, report)
         assert r"\cite{vaswani2017attention}" in result
-        assert "[HALLUCINATED: fakepaper2025hallucinated]" in result
+        # Hallucinated citations are removed, not annotated
+        assert "fakepaper2025hallucinated" not in result
 
     def test_markdown_citations(self) -> None:
         paper = "As shown in [vaswani2017attention] and [fakepaper2025hallucinated]."
@@ -508,9 +509,11 @@ class TestAnnotatePaperHallucinations:
         )
         result = annotate_paper_hallucinations(paper, report)
         assert "[vaswani2017attention]" in result
-        assert "[HALLUCINATED: fakepaper2025hallucinated]" in result
+        # Hallucinated citations are removed, not annotated
+        assert "fakepaper2025hallucinated" not in result
 
     def test_suspicious_annotation(self) -> None:
+        """Suspicious citations are left unchanged (not removed)."""
         paper = r"\cite{devlin2019bert}"
         report = VerificationReport(
             results=[
@@ -524,7 +527,7 @@ class TestAnnotatePaperHallucinations:
             ],
         )
         result = annotate_paper_hallucinations(paper, report)
-        assert "SUSPICIOUS" in result
+        assert r"\cite{devlin2019bert}" in result
 
     def test_no_modifications_all_verified(self) -> None:
         paper = r"See \cite{vaswani2017attention}."

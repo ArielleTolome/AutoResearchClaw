@@ -32,9 +32,10 @@ If you use [OpenClaw](https://github.com/openclaw/openclaw) as your AI assistant
 
 1. Share the GitHub repo URL with OpenClaw:
    ```
-   https://github.com/Jiaaqiliu/AutoResearchClaw
+   https://github.com/aiming-lab/AutoResearchClaw
    ```
 2. OpenClaw reads `RESEARCHCLAW_AGENTS.md` and `README.md` — it now understands the entire system.
+   > **Note:** `RESEARCHCLAW_AGENTS.md` is generated locally and listed in `.gitignore`. If it doesn't exist, OpenClaw can bootstrap from `README.md` and the project structure.
 3. Say something like:
    ```
    Research the application of graph neural networks in drug discovery
@@ -77,7 +78,7 @@ OpenClaw will modify `config.yaml` accordingly before running the pipeline.
 
 ```bash
 # Clone the repository
-git clone https://github.com/Jiaaqiliu/AutoResearchClaw.git
+git clone https://github.com/aiming-lab/AutoResearchClaw.git
 cd AutoResearchClaw
 
 # Create a virtual environment (recommended)
@@ -176,7 +177,7 @@ experiment:
 
 ```yaml
 export:
-  target_conference: "neurips_2024"   # "neurips_2024", "iclr_2025", or "icml_2025"
+  target_conference: "neurips_2025"   # See Section 8 for all available templates
   authors: "Anonymous"                 # Author line in the paper
   bib_file: "references"              # BibTeX file name (without .bib)
 ```
@@ -405,7 +406,7 @@ artifacts/rc-20260310-143200-a1b2c3/
 
 ## 7. Experiment Modes
 
-AutoResearchClaw supports three modes for running experiments:
+AutoResearchClaw supports four modes for running experiments:
 
 ### Simulated (Default)
 
@@ -438,6 +439,29 @@ The pipeline **generates Python code and actually runs it** in a subprocess. The
 - Configurable memory limit and execution timeout
 - Auto-repair: if generated code has validation errors, the LLM fixes them (up to 3 attempts)
 
+### Docker
+
+```yaml
+experiment:
+  mode: "docker"
+  docker:
+    image: "researchclaw/experiment:latest"
+    gpu_enabled: true
+    memory_limit_mb: 8192
+    network_policy: "none"       # none | pip_only | full
+    auto_install_deps: true
+    shm_size_mb: 2048
+```
+
+The pipeline runs generated code inside a **Docker container** with optional GPU passthrough, dependency auto-installation, and network isolation.
+
+**Best for**: Reproducible experiments with full dependency isolation. Supports GPU passthrough (NVIDIA) and configurable network policies.
+
+**Setup**: Build the image first:
+```bash
+docker build -t researchclaw/experiment:latest researchclaw/docker/
+```
+
 ### SSH Remote
 
 ```yaml
@@ -461,14 +485,19 @@ AutoResearchClaw generates LaTeX files formatted for specific conferences:
 
 ```yaml
 export:
-  target_conference: "neurips_2024"
+  target_conference: "neurips_2025"
 ```
 
 | Conference | Config Value | Layout |
 |------------|-------------|--------|
+| NeurIPS 2025 | `neurips_2025` (default) | Single-column, `neurips_2025` style |
 | NeurIPS 2024 | `neurips_2024` | Single-column, `neurips_2024` style |
+| ICLR 2026 | `iclr_2026` | Single-column, `iclr2026_conference` style |
 | ICLR 2025 | `iclr_2025` | Single-column, `iclr2025_conference` style |
+| ICML 2026 | `icml_2026` | Double-column, `icml2026` style |
 | ICML 2025 | `icml_2025` | Double-column, `icml2025` style |
+
+Short aliases are also accepted: `neurips` (→ 2025), `iclr` (→ 2026), `icml` (→ 2026).
 
 The Markdown-to-LaTeX converter handles:
 - Section headings (`#`, `##`, `###`)
@@ -532,7 +561,9 @@ AutoResearchClaw works with any AI coding assistant that can read project contex
 
 ### Claude Code
 
-Claude Code automatically reads `RESEARCHCLAW_CLAUDE.md` when you open the project. It also loads the skill definition from `.claude/skills/researchclaw/SKILL.md`.
+Claude Code automatically reads `RESEARCHCLAW_CLAUDE.md` (if present) when you open the project. It also loads the skill definition from `.claude/skills/researchclaw/SKILL.md`.
+
+> **Note:** `RESEARCHCLAW_CLAUDE.md` is generated locally and listed in `.gitignore`. The `.claude/skills/researchclaw/SKILL.md` file is always available in the repo.
 
 ```
 You: Research the impact of attention mechanisms on speech recognition
@@ -545,13 +576,13 @@ OpenCode loads skills from `.claude/skills/`. The `researchclaw` skill activates
 
 ### Any AI CLI
 
-Provide `RESEARCHCLAW_AGENTS.md` as context to any AI assistant. It contains:
+Provide `RESEARCHCLAW_AGENTS.md` (if generated locally) or `README.md` as context to any AI assistant. `RESEARCHCLAW_AGENTS.md` contains:
 - The agent role definition (research orchestrator)
 - Quick setup instructions
 - Pipeline stage reference
 - Decision guide for common scenarios
 
-The agent reads this file and knows how to install, configure, and run the pipeline.
+The agent reads this file and knows how to install, configure, and run the pipeline. If the file is not present, the `README.md` and `.claude/skills/researchclaw/SKILL.md` provide sufficient context for any AI assistant to operate the pipeline.
 
 ---
 
@@ -678,4 +709,4 @@ A: Not recommended — the pipeline builds on prior stages' outputs. Start a new
 
 ---
 
-*Last updated: March 2026 · AutoResearchClaw v0.2.0*
+*Last updated: March 2026 · AutoResearchClaw v0.5.0*

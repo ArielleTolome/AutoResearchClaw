@@ -142,7 +142,8 @@ def test_build_request_uses_max_completion_tokens_for_new_models(
 ):
     response = {"choices": [{"message": {"content": "x"}, "finish_reason": "stop"}]}
     body, _, _ = _capture_raw_call(monkeypatch, model="gpt-5.2", response_data=response)
-    assert body["max_completion_tokens"] == 123
+    # Reasoning models enforce a minimum of 32768 tokens
+    assert body["max_completion_tokens"] == 32768
     assert "max_tokens" not in body
 
 
