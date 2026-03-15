@@ -155,12 +155,33 @@ def _load_hardware_profile(run_dir: Path) -> dict[str, Any] | None:
 
 
 def _extract_yaml_block(text: str) -> str:
-    if "```yaml" in text:
-        return text.split("```yaml", 1)[1].split("```", 1)[0].strip()
-    if "```yml" in text:
-        return text.split("```yml", 1)[1].split("```", 1)[0].strip()
-    if "```" in text:
-        return text.split("```", 1)[1].split("```", 1)[0].strip()
+    """Extract YAML content from a fenced code block.
+
+    Handles nested fences (e.g. ```python inside a ```yaml block) by tracking
+    fence depth rather than splitting on the first closing fence.
+    """
+    import re as _re_yaml_ext
+
+    for opener in ("```yaml", "```yml", "```"):
+        if opener not in text:
+            continue
+        after_open = text.split(opener, 1)[1]
+        # Walk lines tracking nested fence depth so we don't cut off early
+        lines: list[str] = []
+        depth = 0
+        for line in after_open.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("```") and len(stripped) >= 3:
+                if depth == 0 and stripped == "```":
+                    # Closing fence for the outer block — stop
+                    break
+                depth += 1 if not stripped.endswith("```") or stripped == "```" * 2 else -1
+                if depth < 0:
+                    break
+            lines.append(line)
+        result = "\n".join(lines).strip()
+        if result:
+            return result
     return text.strip()
 
 

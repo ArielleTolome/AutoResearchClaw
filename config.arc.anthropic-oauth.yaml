@@ -57,9 +57,9 @@ security:
 experiment:
   mode: "sandbox"
   time_budget_sec: 300
-  max_iterations: 10
+  max_iterations: 5
   metric_key: "primary_metric"
-  metric_direction: "minimize"
+  metric_direction: "maximize"
   sandbox:
     python_path: ".venv/bin/python3"
     gpu_required: false
