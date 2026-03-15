@@ -32,7 +32,7 @@ openclaw_bridge:
   use_memory: false
   use_sessions_spawn: false
   use_web_fetch: true
-  use_browser: false
+  use_browser: true
 
 llm:
   # Uses your ChatGPT Pro subscription via the Codex CLI.
