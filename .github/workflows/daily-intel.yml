@@ -4,6 +4,8 @@ on:
   schedule:
     # 9:00 AM UTC daily (5 AM ET)
     - cron: '0 9 * * *'
+    # 10:00 AM UTC every Monday (persona builder)
+    - cron: '0 10 * * 1'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -21,10 +23,12 @@ on:
           - reddit
           - competitor
           - digest
+          - persona
         default: all
 
 jobs:
   intel-pipeline:
+    if: github.event.schedule != '0 10 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -38,14 +42,26 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests pyyaml
+        run: pip install requests pyyaml anthropic openai qdrant-client fuzzywuzzy python-Levenshtein
 
       - name: Write config from secrets
         run: |
-          mkdir -p loop/config loop/state
+          mkdir -p loop/config loop/state loop/output
           cat > loop/config/config.yaml << 'YAML'
           baserow:
             api_key: "${{ secrets.BASEROW_API_KEY }}"
+
+          meta:
+            access_token: "${{ secrets.META_ACCESS_TOKEN }}"
+
+          llm:
+            provider: "anthropic"
+            model: "claude-sonnet-4-6"
+
+          qdrant:
+            enabled: false
+            url: "http://37.27.228.106:6333"
+            signals_collection: "autoresearch-signals"
 
           discord:
             webhook_url: "${{ secrets.DISCORD_CREATIVE_SIGNALS_WEBHOOK }}"
@@ -81,6 +97,15 @@ jobs:
           DRY=$([[ "${{ inputs.dry_run }}" == "true" ]] && echo "--dry-run" || echo "")
           python competitor_watcher.py $DRY
 
+      - name: Run meta_ad_library
+        if: inputs.step == 'all' || inputs.step == 'competitor' || inputs.step == ''
+        working-directory: loop/scripts
+        run: |
+          DRY=$([[ "${{ inputs.dry_run }}" == "true" ]] && echo "--dry-run" || echo "")
+          python meta_ad_library.py $DRY --limit 10
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+
       - name: Run intel_digest
         if: inputs.step == 'all' || inputs.step == 'digest' || inputs.step == ''
         working-directory: loop/scripts
@@ -88,13 +113,78 @@ jobs:
           DRY=$([[ "${{ inputs.dry_run }}" == "true" ]] && echo "--dry-run" || echo "")
           python intel_digest.py $DRY
 
-      - name: Persist state
+      - name: Run signal_cards
+        if: inputs.step == 'all' || inputs.step == 'digest' || inputs.step == ''
+        working-directory: loop/scripts
+        run: python signal_cards.py
+
+      - name: Persist state and output
         if: always()
         run: |
           git config --local user.email "autoResearchClaw@github-actions"
           git config --local user.name "AutoResearchClaw"
-          git add loop/state/ || true
+          git add loop/state/ loop/output/ || true
           git diff --staged --quiet || git commit -m "chore: update intel state $(date +%Y-%m-%d)"
+          git push || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  persona-builder:
+    if: github.event.schedule == '0 10 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pyyaml anthropic openai qdrant-client
+
+      - name: Write config from secrets
+        run: |
+          mkdir -p loop/config loop/personas
+          cat > loop/config/config.yaml << 'YAML'
+          baserow:
+            api_key: "${{ secrets.BASEROW_API_KEY }}"
+
+          llm:
+            provider: "anthropic"
+            model: "claude-sonnet-4-6"
+
+          qdrant:
+            enabled: false
+            url: "http://37.27.228.106:6333"
+            signals_collection: "autoresearch-signals"
+
+          discord:
+            webhook_url: "${{ secrets.DISCORD_CREATIVE_SIGNALS_WEBHOOK }}"
+          YAML
+
+      - name: Build Medicare persona
+        working-directory: loop/scripts
+        run: python persona_builder.py --vertical Medicare --post
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Build Auto Insurance persona
+        working-directory: loop/scripts
+        run: python persona_builder.py --vertical "Auto Insurance" --post
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Persist personas
+        if: always()
+        run: |
+          git config --local user.email "autoResearchClaw@github-actions"
+          git config --local user.name "AutoResearchClaw"
+          git add loop/personas/ || true
+          git diff --staged --quiet || git commit -m "chore: weekly persona cards $(date +%Y-%m-%d)"
           git push || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
