@@ -641,6 +641,50 @@ def run_doctor(config_path: str | Path) -> DoctorReport:
             ))
             checks.append(CheckResult(name="api_key_valid", status="fail", detail="No OAuth token"))
             checks.append(CheckResult(name="model_chain", status="warn", detail="Cannot verify without token"))
+    elif provider == "codex-cli":
+        import shutil
+        codex_path = shutil.which("codex")
+        if codex_path:
+            try:
+                import subprocess as _sp
+                import tempfile, os as _os
+                tf = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+                tf.close()
+                r = _sp.run(
+                    [codex_path, "exec", "--json", "-o", tf.name, "-"],
+                    input="ping",
+                    capture_output=True, text=True, timeout=20,
+                )
+                _os.unlink(tf.name)
+                ok = r.returncode == 0 and "turn.completed" in r.stdout
+            except Exception:
+                ok = False
+            status = "pass" if ok else "warn"
+            detail = (
+                f"codex CLI found at {codex_path} (ChatGPT Pro session, no API key needed)"
+                if ok else
+                f"codex CLI found at {codex_path} but smoke-test failed (check `codex login`)"
+            )
+        else:
+            status = "fail"
+            detail = "codex CLI not found in PATH"
+
+        checks.append(CheckResult(
+            name="llm_connectivity",
+            status=status,
+            detail=detail,
+            fix=None if status == "pass" else "brew install codex && codex login",
+        ))
+        checks.append(CheckResult(
+            name="api_key_valid",
+            status="pass",
+            detail="codex-cli: authenticated via ~/.codex/ (ChatGPT OAuth session)",
+        ))
+        checks.append(CheckResult(
+            name="model_chain",
+            status="pass",
+            detail=f"codex-cli: primary={model or 'default (from ~/.codex/config.toml)'}, fallbacks={list(fallback_models)}",
+        ))
     elif provider == "gemini-cli":
         import shutil
         gemini_path = shutil.which("gemini")

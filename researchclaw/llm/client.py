@@ -14,6 +14,10 @@ Supported providers:
                  free tier or Google One AI Premium, no API key needed).
                  Token is auto-refreshed by Gemini CLI. Default model: gemini-2.5-pro.
                  Auth is managed by `~/.gemini/oauth_creds.json`.
+  - codex-cli — shells out to `codex exec --json` (OpenAI Codex CLI, uses ChatGPT Pro/Plus
+                subscription, no separate API key needed). Default model: gpt-5.3-codex-spark
+                (or whatever is set in ~/.codex/config.toml). Supports all Codex CLI models
+                including gpt-5.3-codex-spark, gpt-4.1, o3, etc.
 
 Features:
   - Model fallback chain (configurable per provider)
@@ -281,6 +285,8 @@ class LLMClient:
             return self._call_claude_cli(model, messages, json_mode)
         if provider == "gemini-cli":
             return self._call_gemini_cli(model, messages, json_mode)
+        if provider == "codex-cli":
+            return self._call_codex_cli(model, messages, json_mode)
         if provider == "anthropic-oauth":
             return self._call_anthropic_oauth(
                 model, messages, max_tokens, temperature, json_mode
@@ -622,6 +628,150 @@ class LLMClient:
             finish_reason="stop",
             truncated=False,
             raw=data,
+        )
+
+    # ------------------------------------------------------------------
+    # codex-cli: subprocess using OpenAI Codex CLI (ChatGPT Pro/Plus subscription)
+    # ------------------------------------------------------------------
+    def _call_codex_cli(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        json_mode: bool,
+    ) -> LLMResponse:
+        """Shell out to `codex exec --json` using ChatGPT Pro/Plus subscription.
+
+        Uses ~/.codex/config.toml for auth. No separate OpenAI API key needed.
+        The Codex CLI authenticates via the same OAuth session as ChatGPT.
+        Supports: gpt-5.3-codex-spark, gpt-4.1, o3, o4-mini, and others available
+        to your ChatGPT subscription tier.
+
+        We use:
+          codex exec --json -m <model> -o <tmpfile> -
+        stdin receives the prompt; -o captures the final message cleanly;
+        --json gives us JSONL with token usage from turn.completed.
+        """
+        import shutil
+        import tempfile
+
+        cli_path = shutil.which("codex") or "codex"
+
+        # Separate system messages from conversation
+        system_parts: list[str] = []
+        conversation: list[dict[str, str]] = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_parts.append(msg["content"])
+            else:
+                conversation.append(msg)
+
+        # Build the prompt
+        if len(conversation) == 1:
+            prompt = conversation[0]["content"]
+        else:
+            lines: list[str] = []
+            for msg in conversation:
+                role_label = "Human" if msg["role"] == "user" else "Assistant"
+                lines.append(f"{role_label}: {msg['content']}")
+            prompt = "\n\n".join(lines)
+
+        if system_parts:
+            sys_block = "\n\n".join(system_parts)
+            prompt = f"[System instructions: {sys_block}]\n\n{prompt}"
+
+        if json_mode:
+            prompt += "\n\nRespond with valid JSON only."
+
+        # Resolve effective model — fall back to Codex CLI default (from config.toml)
+        effective_model = model if model and model not in ("default", "codex-cli") else None
+
+        # Write output to a temp file so we can read the clean final message
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tf:
+            out_path = tf.name
+
+        cmd = [cli_path, "exec", "--json", "-o", out_path]
+        if effective_model:
+            cmd += ["-m", effective_model]
+        cmd += ["-"]  # read prompt from stdin
+
+        try:
+            result = subprocess.run(
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=self.config.timeout_sec,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "codex CLI not found. Install: brew install codex or "
+                "visit https://developers.openai.com/codex/cli"
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"codex CLI timed out after {self.config.timeout_sec}s"
+            )
+        finally:
+            import os as _os
+            try:
+                _os.unlink(out_path)
+            except OSError:
+                pass
+
+        # Parse JSONL for token usage and errors
+        input_tokens = 0
+        output_tokens = 0
+        cached_tokens = 0
+        error_msg: str | None = None
+        final_text: str = ""
+
+        for line in result.stdout.strip().splitlines():
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            etype = event.get("type", "")
+            if etype == "turn.completed":
+                usage = event.get("usage", {})
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+                cached_tokens = usage.get("cached_input_tokens", 0)
+            elif etype == "item.completed":
+                item = event.get("item", {})
+                if item.get("type") == "agent_message":
+                    final_text = item.get("text", "")
+            elif etype == "error":
+                error_msg = event.get("message", "")
+            elif etype == "turn.failed":
+                err = event.get("error", {})
+                error_msg = err.get("message", error_msg or "turn failed")
+
+        if error_msg:
+            raise RuntimeError(f"codex CLI error: {error_msg}")
+
+        if not final_text:
+            # Fallback: read the -o file if it exists
+            try:
+                with open(out_path) as f:
+                    final_text = f.read().strip()
+            except OSError:
+                pass
+
+        if not final_text:
+            raise RuntimeError("codex CLI returned empty response")
+
+        used_model = effective_model or "gpt-5.3-codex-spark"
+        return LLMResponse(
+            content=final_text,
+            model=used_model,
+            prompt_tokens=input_tokens,
+            completion_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+            finish_reason="stop",
+            truncated=False,
+            raw={"stdout": result.stdout, "cached_input_tokens": cached_tokens},
         )
 
     def _call_openai(
