@@ -145,6 +145,30 @@ After a run, results land in `artifacts/rc-<timestamp>/`:
 
 ---
 
+## Prompt Modes (Optional Overrides)
+
+AutoResearchClaw ships with alternative prompt sets that swap the pipeline's output format without touching the engine.
+
+**Default mode** — produces ML research papers (academic tone, NeurIPS/ICML structure, citations, ablations). This is what runs unless you explicitly opt in to something else.
+
+### Ad Creative Mode (`prompts.ads.yaml`)
+
+Reorients all 23 stages toward **performance ad creative strategy**. Same pipeline, different output.
+
+**Output:** creative brief with persona card, 3 angles, 20+ hooks, 3 full ad concepts, competitive gap map, testing plan, copy swipe file.
+
+**To enable** (Rachel / creative agents only):
+
+```yaml
+# config.arc.yaml
+prompts:
+  custom_file: "prompts.ads.yaml"
+```
+
+**Do NOT set this** unless you want creative briefs instead of research papers. All other agents should leave `prompts:` unset or remove the `custom_file` key entirely.
+
+---
+
 ## Tips
 
 - Keep topics **specific** — "loyalty discount mechanics in auto insurance" beats "auto insurance"
