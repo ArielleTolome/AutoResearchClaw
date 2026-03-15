@@ -1,5 +1,78 @@
 # AutoResearchClaw Changelog
 
+## v1.3.0 — 2026-03-15
+
+### Added
+- **Tavily source** (`loop/scripts/sources/tavily_source.py`) — mine Reddit and forum audience language via Tavily Search API
+  - No OAuth, no CAPTCHA — zero-friction setup
+  - Niche-specific query sets for auto_insurance, dental_implants, weight_loss, medicare, personal_finance
+  - Returns raw verbatim audience language: complaints, trigger events, objections, desired outcomes
+  - Auto-tagged as `hook_type: audience_language` for the analyze step
+  - Config: `tavily.api_key`, `tavily.include_news`, `tavily.max_results_per_query`
+- Tavily wired into `run_intel_harvest()` alongside Anstrex, Foreplay, FB Ads Library, YouTube
+- Tavily config section added to `config.yaml.example`
+
+---
+
+## v1.2.0 — 2026-03-15
+
+### Added
+- **Baserow integration** (`loop/scripts/baserow_sink.py`) — permanent structured intel memory layer
+  - `write_intel_ads()` — all competitor ads from every harvest source
+  - `write_hooks()` — extracted hooks with scores
+  - `write_creative_brief()` / `update_brief_status()` — briefs with status lifecycle (pending → approved → deployed)
+  - `write_loop_result()` — each 48h cycle: CPA before/after, delta %, challenger copy, learnings summary
+  - JWT auth with graceful degradation (failures log + skip, never crash pipeline)
+- 4 pre-created Baserow tables: `intel_ads` (813), `hooks` (814), `creative_briefs` (815), `loop_results` (816)
+- Config: `baserow.enabled`, `baserow.email`, `baserow.password`
+
+---
+
+## v1.1.2 — 2026-03-15
+
+### Fixed
+- Anstrex source: use `title` param for keyword filtering (`keyword` param silently ignored by API)
+
+---
+
+## v1.1.1 — 2026-03-15
+
+### Fixed
+- Anstrex source: replaced Cloudflare-blocked scraper with real internal app API (`api.anstrex.com`)
+  - Bearer token auth, `sort_id=10` for duration desc (longest-running first)
+  - `min_running_days` filter via `created_at` delta
+
+---
+
+## v1.1.0 — 2026-03-15
+
+### Added
+- **Multi-source intel harvest** — competitive intelligence from 4 live sources:
+  - `sources/anstrex_source.py` — native/push/pops ad intel (Taboola, Outbrain, Newsbreak)
+  - `sources/fb_ads_library_source.py` — longevity tracking via Meta Ads Archive API
+  - `sources/foreplay_source.py` — longest-running Facebook/Instagram creatives
+  - `sources/youtube_source.py` — top ad video hooks with transcript extraction
+- `sources/__init__.py`, `sources/README.md`
+- All sources are best-effort with try/except — one failure never blocks others
+- Intel output saved to `loop/learnings/intel_YYYYMMDD_HHMMSS.json`
+
+---
+
+## v1.0.0 — 2026-03-15
+
+### Added
+- **Qdrant memory persistence** — cross-campaign learnings stored in `rachel-memories` collection
+  - Writes learning summary after each loop cycle
+  - Recalls top-K relevant memories at cycle start to improve challenger generation
+- **Discord reaction approval gate** — challenger copy posted as embed to `#creative` channel
+  - ✅ reaction = approve and deploy, ❌ = kill, ⏭️ = skip cycle
+  - Configurable timeout action (kill / deploy / skip)
+  - Allowed reactors list (whitelist specific Discord user IDs)
+- **Discord embed reporting** — rich cycle summaries with winner/loser metrics, CPA delta, hook scores
+- Config: `qdrant.enabled`, `approval_gate.enabled`, `approval_gate.bot_token`
+
+---
+
 ## v0.9.6 — 2026-03-15
 
 ### Added
