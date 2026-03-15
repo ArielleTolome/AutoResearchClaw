@@ -1,5 +1,57 @@
 # AutoResearchClaw Changelog
 
+## v2.0.0 — 2026-03-15
+
+### Added
+- **Qdrant Memory Layer** (`loop/scripts/qdrant_sink.py`) — signal vectorization and semantic search
+  - Collection: `autoresearch-signals` (1536-dim cosine, OpenAI text-embedding-3-small)
+  - `upsert_signal()` — embeds "{vertical} {headline} {summary}", upserts with full payload
+  - `search_similar()` — semantic search with optional vertical filter
+  - `get_signals_since()` — time-range retrieval for trend analysis
+  - Dedup by SHA256 hash of source_url or headline+date as point ID
+  - `news_watcher.py` and `reddit_source.py` now upsert to Qdrant after every Baserow write (conditional)
+- **Trend Momentum Scorer** (`loop/scripts/trend_scorer.py`) — 7-day rolling topic tracking
+  - Groups signals by normalized topic using fuzzy string matching (fuzzywuzzy)
+  - Momentum tiers: Stable (1 occurrence), Rising 📈 (2-3), Trending 🔥 (4+)
+  - Weekly "What's Heating Up" Discord card via `--weekly-card` flag
+  - CLI: `--vertical`, `--days`, `--json`, `--weekly-card`
+- **Auto Persona Builder** (`loop/scripts/persona_builder.py`) — weekly vertical persona cards
+  - Reads Reddit audience signals from Qdrant or Baserow table 818 fallback
+  - Sends to Claude with Rachel persona prompt for structured persona card
+  - Output: Name, Age Range, Core Pain, Primary Emotion, Trigger Event, Key Verbatim Phrases, Creative Angle, Hook Type
+  - Saves to `loop/personas/{vertical}_{date}.md`
+  - `--post` flag sends embed to #creative Discord webhook
+  - Weekly GHA job: every Monday 10AM UTC for Medicare + Auto Insurance
+- **Meta Ad Library Scraper** (`loop/scripts/meta_ad_library.py`) — Facebook/Instagram competitor intel
+  - Queries Meta Ad Library API v21.0 (`ads_archive` endpoint) for 5 verticals
+  - Extracts hook (first line of ad body), page_name, spend bucket, delivery start date
+  - Freshness scoring: Veteran (>30d), Active (7-30d), New (<7d)
+  - Posts high-value ads (Veteran + Active) to #competitor-watch Discord channel
+  - Handles pagination via after cursor; graceful auth error messages
+  - CLI: `--vertical`, `--dry-run`, `--limit`, `--json`
+- **Signal Card Builder** (`loop/scripts/signal_cards.py`) — button payload generator for Rachel bot
+  - Reads fresh signals from Baserow tables 767 (news) and 818 (reddit)
+  - Builds structured card JSON with 5 action buttons: Brief, Persona, Hooks, Script, Image Ad
+  - Output saved to `loop/output/signal_cards_{date}.json`
+  - Cards consumed by OpenClaw Rachel agent for interactive Discord posting
+  - Added to daily GHA pipeline (runs after intel_digest)
+
+### Changed
+- **GHA daily-intel.yml** — expanded pipeline:
+  - Added `meta_ad_library.py` to daily competitor step
+  - Added `signal_cards.py` step after intel_digest
+  - Added weekly `persona-builder` job (Monday 10AM UTC)
+  - Expanded pip install to include anthropic, openai, qdrant-client, fuzzywuzzy
+  - Config template now includes meta, llm, and qdrant sections
+- **requirements.txt** — added fuzzywuzzy>=0.18.0 and python-Levenshtein>=0.12.0
+- **config.yaml.example** — added `qdrant.signals_collection` field
+
+### New directories
+- `loop/output/` — signal card JSON output (with .gitkeep)
+- `loop/personas/` — generated persona card markdown files
+
+---
+
 ## v1.6.0 — 2026-03-15
 
 ### Added
