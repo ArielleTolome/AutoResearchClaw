@@ -66,3 +66,29 @@ approval_gate:
   timeout_hours: 4                  # Hours to wait before applying timeout_action
   timeout_action: "kill"            # kill | deploy | skip_and_continue
   poll_interval_seconds: 60         # How often to check for reactions
+
+# ── Intel Harvest (Multi-Source) ─────────────────────────────────────────────
+intel_harvest:
+  enabled: false
+
+# ── Foreplay ─────────────────────────────────────────────────────────────────
+foreplay:
+  api_key: "YOUR_FOREPLAY_API_KEY"
+  min_running_days: 30
+
+# ── Facebook Ads Library ─────────────────────────────────────────────────────
+fb_ads_library:
+  access_token: "YOUR_FB_ACCESS_TOKEN"
+  min_running_days: 30
+
+# ── YouTube ───────────────────────────────────────────────────────────────────
+youtube:
+  api_key: "YOUR_YOUTUBE_API_KEY"
+  include_transcripts: true
+
+# ── Anstrex ───────────────────────────────────────────────────────────────────
+anstrex:
+  username: "YOUR_ANSTREX_EMAIL"
+  password: "YOUR_ANSTREX_PASSWORD"
+  platform: "native"
+  session_cookies: ""
