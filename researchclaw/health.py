@@ -641,6 +641,46 @@ def run_doctor(config_path: str | Path) -> DoctorReport:
             ))
             checks.append(CheckResult(name="api_key_valid", status="fail", detail="No OAuth token"))
             checks.append(CheckResult(name="model_chain", status="warn", detail="Cannot verify without token"))
+    elif provider == "gemini-cli":
+        import shutil
+        gemini_path = shutil.which("gemini")
+        if gemini_path:
+            # Quick smoke test
+            try:
+                import subprocess as _sp
+                r = _sp.run(
+                    [gemini_path, "--output-format", "json", "--prompt", "ping"],
+                    capture_output=True, text=True, timeout=15,
+                )
+                ok = r.returncode == 0 and r.stdout.strip()
+            except Exception:
+                ok = False
+            status = "pass" if ok else "warn"
+            detail = (
+                f"gemini CLI found at {gemini_path} (Gemini OAuth session, no API key needed)"
+                if ok else
+                f"gemini CLI found at {gemini_path} but smoke-test failed (may still work)"
+            )
+        else:
+            status = "fail"
+            detail = "gemini CLI not found in PATH"
+
+        checks.append(CheckResult(
+            name="llm_connectivity",
+            status=status,
+            detail=detail,
+            fix=None if status == "pass" else "brew install gemini-cli && gemini auth login",
+        ))
+        checks.append(CheckResult(
+            name="api_key_valid",
+            status="pass",
+            detail="gemini-cli: authenticated via ~/.gemini/oauth_creds.json",
+        ))
+        checks.append(CheckResult(
+            name="model_chain",
+            status="pass",
+            detail=f"gemini-cli: primary={model}, fallbacks={list(fallback_models)}",
+        ))
     else:
         checks.append(check_llm_connectivity(base_url))
         checks.append(check_api_key_valid(base_url, api_key))

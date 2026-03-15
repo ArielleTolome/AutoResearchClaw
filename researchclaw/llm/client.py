@@ -10,6 +10,10 @@ Supported providers:
                       No Anthropic console key needed — uses your Claude Max subscription.
                       Token is auto-read from ~/.openclaw/agents/main/agent/auth-profiles.json
                       or ANTHROPIC_OAUTH_TOKEN env var.
+  - gemini-cli — shells out to `gemini --output-format json` (Gemini CLI OAuth session,
+                 free tier or Google One AI Premium, no API key needed).
+                 Token is auto-refreshed by Gemini CLI. Default model: gemini-2.5-pro.
+                 Auth is managed by `~/.gemini/oauth_creds.json`.
 
 Features:
   - Model fallback chain (configurable per provider)
@@ -275,6 +279,8 @@ class LLMClient:
             )
         if provider == "claude-cli":
             return self._call_claude_cli(model, messages, json_mode)
+        if provider == "gemini-cli":
+            return self._call_gemini_cli(model, messages, json_mode)
         if provider == "anthropic-oauth":
             return self._call_anthropic_oauth(
                 model, messages, max_tokens, temperature, json_mode
@@ -496,6 +502,126 @@ class LLMClient:
             finish_reason="stop",
             truncated=False,
             raw={"stdout": content, "stderr": result.stderr},
+        )
+
+    # ------------------------------------------------------------------
+    # gemini-cli: subprocess using Gemini CLI OAuth session
+    # ------------------------------------------------------------------
+    def _call_gemini_cli(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        json_mode: bool,
+    ) -> LLMResponse:
+        """Shell out to `gemini --output-format json` using Gemini CLI OAuth session.
+
+        Uses `~/.gemini/oauth_creds.json` (auto-refreshed by Gemini CLI).
+        No API key required — uses the locally authenticated Gemini CLI session.
+        Supports free tier and Google One AI Premium quota.
+        """
+        import shutil
+
+        cli_path = shutil.which("gemini") or "gemini"
+
+        # Separate system messages from conversation
+        system_parts: list[str] = []
+        conversation: list[dict[str, str]] = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_parts.append(msg["content"])
+            else:
+                conversation.append(msg)
+
+        # Build the prompt (gemini --prompt is single-turn via stdin or -p flag)
+        if len(conversation) == 1:
+            prompt = conversation[0]["content"]
+        else:
+            lines: list[str] = []
+            for msg in conversation:
+                role_label = "User" if msg["role"] == "user" else "Model"
+                lines.append(f"{role_label}: {msg['content']}")
+            prompt = "\n\n".join(lines)
+
+        if system_parts:
+            # Gemini CLI doesn't have a direct system prompt flag in non-interactive mode
+            # so we prepend it to the prompt
+            sys_block = "\n\n".join(system_parts)
+            prompt = f"[System instructions: {sys_block}]\n\n{prompt}"
+
+        if json_mode:
+            prompt += "\n\nRespond with valid JSON only."
+
+        # Resolve the effective model (gemini-2.5-pro is default)
+        effective_model = model if model and model not in ("default", "gemini-cli") else "gemini-2.5-pro"
+
+        cmd = [
+            cli_path,
+            "--output-format", "json",
+            "--model", effective_model,
+            "--prompt", prompt,
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.config.timeout_sec,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "gemini CLI not found. Install: brew install gemini-cli or "
+                "visit https://github.com/google-gemini/gemini-cli"
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"gemini CLI timed out after {self.config.timeout_sec}s"
+            )
+
+        if result.returncode != 0:
+            stderr = result.stderr.strip()[:400]
+            raise RuntimeError(f"gemini CLI exited {result.returncode}: {stderr}")
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            raise RuntimeError("gemini CLI returned empty response")
+
+        # Parse JSON output
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError:
+            # Fallback: treat raw output as the response
+            return LLMResponse(
+                content=stdout,
+                model=effective_model,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                finish_reason="stop",
+                truncated=False,
+                raw={"stdout": stdout},
+            )
+
+        content = data.get("response", "")
+        stats = data.get("stats", {})
+        model_stats = stats.get("models", {})
+        # Aggregate token counts across all models used
+        input_tokens = 0
+        output_tokens = 0
+        for ms in model_stats.values():
+            tokens = ms.get("tokens", {})
+            input_tokens += tokens.get("input", 0) or tokens.get("prompt", 0)
+            output_tokens += tokens.get("candidates", 0)
+
+        return LLMResponse(
+            content=content,
+            model=data.get("model", effective_model),
+            prompt_tokens=input_tokens,
+            completion_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+            finish_reason="stop",
+            truncated=False,
+            raw=data,
         )
 
     def _call_openai(
