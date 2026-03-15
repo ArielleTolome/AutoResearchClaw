@@ -47,6 +47,7 @@ _CFG = _load_config()
 _QDRANT_CFG = _CFG.get("qdrant", {})
 
 QDRANT_URL = _QDRANT_CFG.get("url", "http://37.27.228.106:6333")
+QDRANT_API_KEY = _QDRANT_CFG.get("api_key", os.getenv("QDRANT_API_KEY", ""))
 QDRANT_ENABLED = _QDRANT_CFG.get("enabled", False)
 COLLECTION = _QDRANT_CFG.get("signals_collection", "autoresearch-signals")
 VECTOR_DIM = 1536
@@ -66,7 +67,10 @@ def _get_client() -> "QdrantClient":
     if _client is None:
         if not HAS_QDRANT:
             raise ImportError("qdrant-client not installed — pip install qdrant-client")
-        _client = QdrantClient(url=QDRANT_URL, timeout=15)
+        kwargs = {"url": QDRANT_URL, "timeout": 15}
+        if QDRANT_API_KEY:
+            kwargs["api_key"] = QDRANT_API_KEY
+        _client = QdrantClient(**kwargs)
     return _client
 
 
