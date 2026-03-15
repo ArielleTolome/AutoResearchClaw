@@ -5986,7 +5986,11 @@ def execute_stage(
     llm = None
     try:
         candidate = LLMClient.from_rc_config(config)
-        if candidate.config.base_url and candidate.config.api_key:
+        # CLI providers don't use base_url/api_key — authenticate via subprocess.
+        # Only require base_url+api_key for REST-based providers.
+        _cli_providers = {"claude-cli", "anthropic-oauth", "gemini-cli", "codex-cli"}
+        _provider = getattr(config.llm, "provider", "") or "openai"
+        if _provider in _cli_providers or (candidate.config.base_url and candidate.config.api_key):
             llm = candidate
     except Exception:  # noqa: BLE001
         llm = None

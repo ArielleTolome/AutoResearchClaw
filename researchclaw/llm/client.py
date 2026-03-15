@@ -105,17 +105,23 @@ class LLMClient:
     @classmethod
     def from_rc_config(cls, rc_config: Any) -> LLMClient:
         provider = getattr(rc_config.llm, "provider", "") or "openai"
+        # Safely read optional fields that may not exist in older configs
+        _get = lambda attr, default: getattr(rc_config.llm, attr, default) or default  # noqa: E731
         return cls(
             LLMConfig(
-                base_url=rc_config.llm.base_url,
+                base_url=_get("base_url", ""),
                 api_key=str(
-                    rc_config.llm.api_key
-                    or os.environ.get(rc_config.llm.api_key_env, "")
+                    _get("api_key", "")
+                    or os.environ.get(_get("api_key_env", ""), "")
                     or ""
                 ),
                 provider=provider,
                 primary_model=rc_config.llm.primary_model,
                 fallback_models=list(rc_config.llm.fallback_models or []),
+                api_key_env=_get("api_key_env", ""),
+                max_tokens=int(_get("max_tokens", 4096)),
+                temperature=float(_get("temperature", 0.7)),
+                timeout_sec=int(_get("timeout_sec", 300)),
             )
         )
 
@@ -257,6 +263,25 @@ class LLMClient:
             except urllib.error.URLError:
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.retry_base_delay * (2**attempt)
+                    time.sleep(delay)
+                    continue
+                raise
+            except RuntimeError as e:
+                # CLI provider transient errors (empty response, timeout, etc.)
+                # Non-retryable CLI errors: model not found, auth failure
+                err_str = str(e).lower()
+                if any(kw in err_str for kw in ("not found", "auth", "login", "install")):
+                    raise
+                if attempt < self.config.max_retries - 1:
+                    delay = self.config.retry_base_delay * (2**attempt)
+                    logger.info(
+                        "CLI retry %d/%d for %s: %s. Waiting %.1fs.",
+                        attempt + 1,
+                        self.config.max_retries,
+                        model,
+                        str(e)[:100],
+                        delay,
+                    )
                     time.sleep(delay)
                     continue
                 raise
