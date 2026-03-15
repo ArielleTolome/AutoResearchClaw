@@ -169,6 +169,57 @@ prompts:
 
 ---
 
+## Discord Trigger (Rachel)
+
+Rachel can run a brief for you directly from Discord — no CLI needed.
+
+**Just say:**
+> "Run a brief on [topic] for [platform]"
+> e.g. "Do national debt relief for Facebook ads"
+
+Rachel fires `run_brief.sh` on Bill's GPU server, sets a poll every 5 min, and posts the full creative brief back to Discord when done (~30 min).
+
+### run_brief.sh
+
+Located at the repo root. Usage:
+
+```bash
+bash run_brief.sh "<topic>" [platform] [run_id]
+```
+
+Platforms: `meta` (default) | `tiktok` | `youtube` | `native`
+
+- Picks the right platform config automatically
+- Patches topic into a temp YAML (original configs untouched)
+- Runs `research.sh` in the background via `nohup`
+- Drops `.done` / `.fail` markers in `/root/arc_runs/` when finished
+- Prints `<run-id>` and `PID` so Rachel can poll
+
+**Poll a run:**
+
+```bash
+# Status
+ls /root/arc_runs/<run-id>.done 2>/dev/null && echo DONE \
+  || ls /root/arc_runs/<run-id>.fail 2>/dev/null && echo FAILED \
+  || echo RUNNING
+
+# Live log
+tail -50 /root/arc_runs/<run-id>.log
+
+# Output files
+find /root/AutoResearchClaw/runs/<run-id> -name '*.md' 2>/dev/null
+```
+
+**Output:**
+
+```
+runs/<run-id>/stage-23/creative_brief.md   ← angles, hooks, ad concepts
+runs/<run-id>/stage-23/hooks.md            ← full hook matrix
+runs/<run-id>/stage-04/candidates.jsonl    ← raw audience language
+```
+
+---
+
 ## Tips
 
 - Keep topics **specific** — "loyalty discount mechanics in auto insurance" beats "auto insurance"
