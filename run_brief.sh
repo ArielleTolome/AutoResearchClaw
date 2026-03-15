@@ -32,18 +32,27 @@ PY
 # Generate run ID
 if [[ -z "$RUN_ID" ]]; then RUN_ID="brief-$(date +%Y%m%d-%H%M%S)-${PLATFORM}"; fi
 
+OUTPUT_DIR="/root/AutoResearchClaw/runs/${RUN_ID}"
 LOG="/root/arc_runs/${RUN_ID}.log"
 DONE_MARKER="/root/arc_runs/${RUN_ID}.done"
 FAIL_MARKER="/root/arc_runs/${RUN_ID}.fail"
-mkdir -p /root/arc_runs
+mkdir -p /root/arc_runs "$OUTPUT_DIR"
 
 # Print run ID so caller knows what to poll
 echo "$RUN_ID"
 
-# Run in background
+# Run in background using researchclaw CLI (--output instead of --run-id)
 nohup bash -c "
-  cd $WORKDIR
-  bash research.sh '$TOPIC' --config '$TMPCONFIG' --run-id '$RUN_ID' > '$LOG' 2>&1
+  set -euo pipefail
+  cd '$WORKDIR'
+  source .venv/bin/activate
+  researchclaw run \
+    --topic '$TOPIC' \
+    --config '$TMPCONFIG' \
+    --output '$OUTPUT_DIR' \
+    --auto-approve \
+    --skip-noncritical-stage \
+    > '$LOG' 2>&1
   EXIT=\$?
   rm -f '$TMPCONFIG'
   if [[ \$EXIT -eq 0 ]]; then
