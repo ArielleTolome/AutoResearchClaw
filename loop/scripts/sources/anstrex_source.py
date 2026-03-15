@@ -96,7 +96,7 @@ def fetch_anstrex_ads(
                 params={
                     "product_name": platform,
                     "product_type": "creative",
-                    "keyword": topic,
+                    "title": topic,        # "title" is the working keyword filter
                     "sort_id": _SORT_DURATION_DESC,
                     "page": page,
                     "additional_data": "eyJpcCI6bnVsbH0=",  # {"ip": null}
