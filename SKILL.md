@@ -2,10 +2,12 @@
 name: auto-research-claw
 description: >
   Run AutoResearchClaw — a fully autonomous research pipeline that goes from a
-  topic prompt to a structured research paper. Use when someone says "research X",
-  "write a paper on X", "run AutoResearchClaw on X", or needs a deep autonomous
-  research run with literature search, experiments, and citation verification.
-  Covers any domain: marketing, ML, finance, science, business, etc.
+  topic prompt to a structured research output. Use when someone says "research X",
+  "run a brief on X", "brief me on X for [platform]", or needs deep research on
+  any topic: ad creative strategy, market research, competitive intel, audience
+  analysis, product categories, verticals, or academic/ML research.
+  Works for any domain. Platform configs (meta/tiktok/youtube/native) add
+  ad-creative framing; without them it produces general research output.
 metadata:
   openclaw:
     requires:
