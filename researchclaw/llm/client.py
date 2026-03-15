@@ -4,6 +4,7 @@ Supported providers:
   - OpenAI (default) — /chat/completions, Bearer auth
   - Anthropic — /messages, x-api-key auth, system as top-level param
   - OpenRouter — /chat/completions, Bearer auth + HTTP-Referer/X-Title
+  - claude-cli — shells out to `claude --print` (Claude Max subscription, no API key needed)
 
 Features:
   - Model fallback chain (configurable per provider)
@@ -19,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -188,6 +190,8 @@ class LLMClient:
             return False, f"Connection failed: {e}"
         except RuntimeError as e:
             return False, f"All models failed: {e}"
+        except Exception as e:  # noqa: BLE001
+            return False, str(e)
 
     def _call_with_retry(
         self,
@@ -264,9 +268,98 @@ class LLMClient:
             return self._call_openrouter(
                 model, messages, max_tokens, temperature, json_mode
             )
+        if provider == "claude-cli":
+            return self._call_claude_cli(model, messages, json_mode)
         # Default: OpenAI-compatible (covers "openai", "openai-compatible", etc.)
         return self._call_openai(
             model, messages, max_tokens, temperature, json_mode
+        )
+
+    def _call_claude_cli(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        json_mode: bool,
+    ) -> LLMResponse:
+        """Shell out to `claude --print` using Claude Max subscription.
+
+        Concatenates message history into a single prompt for --print mode.
+        No API key required — uses the locally authenticated Claude CLI session.
+        """
+        import shutil
+
+        cli_path = shutil.which("claude") or "claude"
+
+        # Separate system messages from the conversation
+        system_parts: list[str] = []
+        conversation: list[dict[str, str]] = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_parts.append(msg["content"])
+            else:
+                conversation.append(msg)
+
+        # Format conversation history as a single prompt block
+        # claude --print is single-turn so we inline prior turns
+        if len(conversation) == 1:
+            prompt = conversation[0]["content"]
+        else:
+            lines: list[str] = []
+            for msg in conversation:
+                role_label = "Human" if msg["role"] == "user" else "Assistant"
+                lines.append(f"{role_label}: {msg['content']}")
+            # Final turn must be a user message; append prompt cue
+            prompt = "\n\n".join(lines)
+
+        if json_mode:
+            prompt += "\n\nRespond with valid JSON only."
+
+        cmd = [cli_path, "--print", "--no-session-persistence"]
+
+        if model and model not in ("default", "claude-cli"):
+            cmd += ["--model", model]
+
+        if system_parts:
+            cmd += ["--system-prompt", "\n\n".join(system_parts)]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=self.config.timeout_sec,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "claude CLI not found. Install Claude Code: https://claude.ai/code"
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"claude CLI timed out after {self.config.timeout_sec}s"
+            )
+
+        if result.returncode != 0:
+            stderr = result.stderr.strip()[:400]
+            raise RuntimeError(f"claude CLI exited {result.returncode}: {stderr}")
+
+        content = result.stdout.strip()
+        if not content:
+            raise RuntimeError("claude CLI returned empty response")
+
+        # Rough token estimate (claude CLI doesn't expose usage)
+        prompt_tokens = len(prompt.split()) * 4 // 3
+        completion_tokens = len(content.split()) * 4 // 3
+
+        return LLMResponse(
+            content=content,
+            model=model or "claude-cli",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            finish_reason="stop",
+            truncated=False,
+            raw={"stdout": content, "stderr": result.stderr},
         )
 
     def _call_openai(

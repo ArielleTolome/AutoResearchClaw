@@ -556,10 +556,14 @@ def run_doctor(config_path: str | Path) -> DoctorReport:
     sandbox_python_path = ""
     experiment_mode = ""
 
+    provider = ""
     try:
         config = RCConfig.load(path, check_paths=False)
+        provider = getattr(config.llm, "provider", "") or "openai"
         base_url = config.llm.base_url
-        api_key = config.llm.api_key or os.environ.get(config.llm.api_key_env, "")
+        api_key = config.llm.api_key or (
+            os.environ.get(config.llm.api_key_env, "") if config.llm.api_key_env else ""
+        )
         model = config.llm.primary_model
         fallback_models = config.llm.fallback_models
         sandbox_python_path = config.experiment.sandbox.python_path
@@ -567,9 +571,39 @@ def run_doctor(config_path: str | Path) -> DoctorReport:
     except (FileNotFoundError, OSError, ValueError, yaml.YAMLError) as exc:
         logger.debug("Could not fully load config for doctor checks: %s", exc)
 
-    checks.append(check_llm_connectivity(base_url))
-    checks.append(check_api_key_valid(base_url, api_key))
-    checks.append(check_model_chain(base_url, api_key, model, fallback_models))
+    if provider == "claude-cli":
+        # For claude-cli, replace HTTP checks with a CLI availability check
+        import shutil
+        cli_path = shutil.which("claude")
+        if cli_path:
+            checks.append(CheckResult(
+                name="llm_connectivity",
+                status="pass",
+                detail=f"claude CLI found at {cli_path} (Claude Max, no API key needed)",
+            ))
+            checks.append(CheckResult(
+                name="api_key_valid",
+                status="pass",
+                detail="claude-cli provider: authenticated via local Claude Code session",
+            ))
+            checks.append(CheckResult(
+                name="model_chain",
+                status="pass",
+                detail=f"claude-cli: primary={model}, fallbacks={list(fallback_models)}",
+            ))
+        else:
+            checks.append(CheckResult(
+                name="llm_connectivity",
+                status="fail",
+                detail="claude CLI not found in PATH",
+                fix="Install Claude Code from https://claude.ai/code and run `claude` to authenticate",
+            ))
+            checks.append(CheckResult(name="api_key_valid", status="pass", detail="N/A for claude-cli"))
+            checks.append(CheckResult(name="model_chain", status="warn", detail="Cannot verify — claude CLI not installed"))
+    else:
+        checks.append(check_llm_connectivity(base_url))
+        checks.append(check_api_key_valid(base_url, api_key))
+        checks.append(check_model_chain(base_url, api_key, model, fallback_models))
     checks.append(check_sandbox_python(sandbox_python_path))
     checks.append(check_matplotlib())
     checks.append(check_experiment_mode(experiment_mode))

@@ -319,7 +319,14 @@ def validate_config(
     errors: list[str] = []
     warnings: list[str] = []
 
+    # claude-cli provider doesn't need base_url or api_key_env
+    _provider = _get_by_path(data, "llm.provider") or "openai"
+    _cli_providers = {"claude-cli"}
+    _optional_for_cli = {"llm.base_url", "llm.api_key_env"}
+
     for key in REQUIRED_FIELDS:
+        if key in _optional_for_cli and _provider in _cli_providers:
+            continue
         value = _get_by_path(data, key)
         if _is_blank(value):
             errors.append(f"Missing required field: {key}")
