@@ -210,6 +210,7 @@ def run_intel_harvest(config: dict, dry_run: bool = False) -> dict:
     from sources.fb_ads_library_source import fetch_fb_ads
     from sources.youtube_source import fetch_youtube_hooks
     from sources.anstrex_source import fetch_anstrex_ads
+    from sources.tavily_source import fetch_tavily_audience
 
     niche = config.get("offer", {}).get("niche", "general")
     platform = config.get("offer", {}).get("platform", "")
@@ -249,6 +250,13 @@ def run_intel_harvest(config: dict, dry_run: bool = False) -> dict:
     except Exception as e:
         print(f"[INTEL] Anstrex failed: {e}")
         combined["anstrex"] = []
+
+    # Tavily (Reddit + forums audience language)
+    try:
+        combined["tavily"] = fetch_tavily_audience(config, topic, dry_run=dry_run)
+    except Exception as e:
+        print(f"[INTEL] Tavily failed: {e}")
+        combined["tavily"] = []
 
     # Summary
     for src, ads in combined.items():
