@@ -21,7 +21,9 @@ case "$PLATFORM" in
 esac
 
 # Patch topic into config inline (temp file)
-TMPCONFIG="/tmp/arc_brief_$$.yaml"
+# Keep temp config inside the repo dir so relative paths (e.g. prompts.ads.yaml)
+# resolve correctly — config.py sets project_root = config_path.parent
+TMPCONFIG="${WORKDIR}/arc_brief_$$.yaml"
 .venv/bin/python3 - "$CONFIG" "$TOPIC" "$TMPCONFIG" << 'PY'
 import sys, yaml
 with open(sys.argv[1]) as f: cfg = yaml.safe_load(f)
