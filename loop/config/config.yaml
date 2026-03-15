@@ -58,6 +58,7 @@ approval_gate:
 qdrant:
   enabled: true
   url: "http://37.27.228.106:6333"
+  api_key: "74Vi2inAj2Y0FcyL8zyF1FIC7dIx66"
   collection: "rachel-memories"
   signals_collection: "autoresearch-signals"
 
