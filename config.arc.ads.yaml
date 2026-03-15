@@ -1,0 +1,95 @@
+# =============================================================================
+# AutoResearchClaw — Ad Creative Research Config
+# config.arc.ads.yaml
+#
+# Ready-to-run config for Rachel / ad creative research mode.
+# No editing required — just set `research.topic` and run.
+#
+# Usage:
+#   ./research.sh "auto insurance comparison" --config config.arc.ads.yaml
+#   .venv/bin/researchclaw run --config config.arc.ads.yaml --topic "your topic"
+#
+# Platform options: meta | tiktok | youtube | native
+# Change research.platform to switch platform context across the brief.
+# =============================================================================
+
+project:
+  name: "ad-creative-research"
+  mode: "full-auto"
+
+research:
+  # ── Change these for each run ──────────────────────────────────────────
+  topic: "Your offer/niche here — e.g. auto insurance comparison"
+  platform: "meta"   # meta | tiktok | youtube | native
+  # ──────────────────────────────────────────────────────────────────────
+
+  domains:
+    - "performance advertising"
+    - "direct response marketing"
+    - "ad creative strategy"
+  daily_paper_count: 30       # More candidates = better angle shortlist
+  quality_threshold: 3.5      # Lower threshold — keeps more edge-case sources
+
+runtime:
+  timezone: "America/New_York"
+  max_parallel_tasks: 3
+  approval_timeout_hours: 6
+  retry_limit: 2
+
+notifications:
+  channel: "console"
+  target: ""
+  on_stage_start: true
+  on_stage_fail: true
+  on_gate_required: false     # Full-auto, no gates
+
+knowledge_base:
+  backend: "markdown"
+  root: "docs/kb"
+
+openclaw_bridge:
+  use_cron: false
+  use_message: false
+  use_memory: false
+  use_sessions_spawn: false
+  use_web_fetch: true         # Required for live data fetching
+  use_browser: false
+
+llm:
+  # Uses your ChatGPT Pro subscription via Codex CLI.
+  # No separate OpenAI API key required — authenticated via `codex login`.
+  provider: "codex-cli"
+  base_url: ""
+  api_key: ""
+  api_key_env: ""
+  primary_model: "gpt-5.3-codex-spark"
+  fallback_models: []
+
+security:
+  hitl_required_stages: []    # Full-auto — no human-in-the-loop gates
+  allow_publish_without_approval: true
+  redact_sensitive_logs: false
+
+experiment:
+  mode: "sandbox"
+  time_budget_sec: 600        # More time for hook scoring analysis
+  max_iterations: 5
+  metric_key: "hook_score"    # Primary metric: hook quality score
+  metric_direction: "maximize"
+  sandbox:
+    python_path: ".venv/bin/python3"
+    gpu_required: false
+    max_memory_mb: 4096
+  ssh_remote:
+    host: "100.86.239.1"      # Bill's GPU server (if needed)
+    gpu_ids: []
+    remote_workdir: "/tmp/researchclaw_experiments"
+
+export:
+  target_conference: "neurips_2025"  # Unused in ads mode — brief format overrides
+  authors: "Rachel"
+  bib_file: "references"
+
+# ── Ads mode: switch to creative brief pipeline ──────────────────────────
+prompts:
+  custom_file: "prompts.ads.yaml"
