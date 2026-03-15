@@ -102,3 +102,9 @@ baserow:
   password: "YOUR_BASEROW_PASSWORD"
   # Table IDs (pre-created in AutoResearchClaw database):
   #   intel_ads: 813 | hooks: 814 | creative_briefs: 815 | loop_results: 816
+
+# ── Tavily (Reddit + Forum Audience Language) ────────────────────────────────
+tavily:
+  api_key: "YOUR_TAVILY_API_KEY"   # https://app.tavily.com
+  include_news: false               # true = also search news/review sites
+  max_results_per_query: 5          # Results per subreddit query (5 = ~25 total)
