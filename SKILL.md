@@ -229,3 +229,61 @@ runs/<run-id>/stage-04/candidates.jsonl    ← raw audience language
 - For GPU experiments, set `experiment.mode: ssh_remote` and point to Bill's server
 - Research outputs should feed into your next creative brief or hook batch
 - Tag runs in Discord `#research` so Marcus and Christina can see findings
+
+---
+
+## Creative Loop — Self-Improving Ad Testing (v0.9.6)
+
+The `loop/` directory contains a fully autonomous ad creative testing pipeline.
+Inspired by Karpathy's AutoResearch loop — same principle, applied to Meta ads.
+
+**Research pipeline → seeds baseline → loop tests + improves autonomously.**
+
+### The Cycle
+
+```
+HARVEST → ANALYZE → GENERATE → DEPLOY → 48h → repeat
+```
+
+### Quick Start
+
+```bash
+cd ~/.openclaw/workspace/AutoResearchClaw/loop
+pip install -r requirements.txt
+cp config/config.yaml.example config/config.yaml
+# Fill in: meta.access_token, meta.ad_account_id, llm.api_key, offer.*
+
+# Dry run
+python orchestrator/orchestrator.py --dry-run
+
+# Live run
+python orchestrator/orchestrator.py --adset-id act_XXXXXXXX --link-url https://yourpage.com
+```
+
+### Rachel Trigger (from Discord)
+
+> "Start the loop for [offer] on adset [ID]"
+> "Run a loop cycle dry run"
+> "Check loop learnings"
+
+Rachel SSHes into Bill's server and runs the orchestrator.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `loop/config/config.yaml` | API keys, offer config, kill rules |
+| `loop/config/baseline.md` | Seed this from research brief output |
+| `loop/learnings/learnings.md` | Compounding memory — grows each cycle |
+| `loop/config/prompts.yaml` | System prompts for analyze/generate/consolidate |
+
+### Loop via GitHub Actions
+
+Push to `ArielleTolome/AutoResearchClaw` with GitHub Secrets set.
+Actions cron: every 48h. Also triggerable manually from Actions UI.
+
+### Kill Rules (defaults)
+
+- Hook rate < 15% → pause
+- CTR < 0.5% → pause  
+- CPA > 3x target CPA → pause (Marcel's rule)
