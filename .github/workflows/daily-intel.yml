@@ -1,0 +1,100 @@
+name: Daily Intel Pipeline
+
+on:
+  schedule:
+    # 9:00 AM UTC daily (5 AM ET)
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no writes, no Discord)'
+        required: false
+        default: 'false'
+        type: boolean
+      step:
+        description: 'Run specific step only'
+        required: false
+        type: choice
+        options:
+          - all
+          - news
+          - reddit
+          - competitor
+          - digest
+        default: all
+
+jobs:
+  intel-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pyyaml
+
+      - name: Write config from secrets
+        run: |
+          mkdir -p loop/config loop/state
+          cat > loop/config/config.yaml << 'YAML'
+          baserow:
+            api_key: "${{ secrets.BASEROW_API_KEY }}"
+
+          discord:
+            webhook_url: "${{ secrets.DISCORD_CREATIVE_SIGNALS_WEBHOOK }}"
+            channel_id: "1482849535473614848"
+            competitor_webhook_url: "${{ secrets.DISCORD_COMPETITOR_WATCH_WEBHOOK }}"
+            competitor_channel_id: "1482851982837547048"
+            intel_webhook_url: "${{ secrets.DISCORD_INTEL_WEBHOOK }}"
+            intel_channel_id: "1482366898762022915"
+            research_webhook_url: "${{ secrets.DISCORD_RESEARCH_WEBHOOK }}"
+            research_channel_id: "1482667804359397438"
+          YAML
+
+      - name: Run news_watcher
+        if: inputs.step == 'all' || inputs.step == 'news' || inputs.step == ''
+        working-directory: loop/scripts
+        run: |
+          DRY=$([[ "${{ inputs.dry_run }}" == "true" ]] && echo "--dry-run" || echo "")
+          python news_watcher.py $DRY --limit 5 --verticals-only
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_CREATIVE_SIGNALS_WEBHOOK }}
+
+      - name: Run reddit_source
+        if: inputs.step == 'all' || inputs.step == 'reddit' || inputs.step == ''
+        working-directory: loop/scripts
+        run: |
+          DRY=$([[ "${{ inputs.dry_run }}" == "true" ]] && echo "--dry-run" || echo "")
+          python reddit_source.py $DRY --limit 5
+
+      - name: Run competitor_watcher
+        if: inputs.step == 'all' || inputs.step == 'competitor' || inputs.step == ''
+        working-directory: loop/scripts
+        run: |
+          DRY=$([[ "${{ inputs.dry_run }}" == "true" ]] && echo "--dry-run" || echo "")
+          python competitor_watcher.py $DRY
+
+      - name: Run intel_digest
+        if: inputs.step == 'all' || inputs.step == 'digest' || inputs.step == ''
+        working-directory: loop/scripts
+        run: |
+          DRY=$([[ "${{ inputs.dry_run }}" == "true" ]] && echo "--dry-run" || echo "")
+          python intel_digest.py $DRY
+
+      - name: Persist state
+        if: always()
+        run: |
+          git config --local user.email "autoResearchClaw@github-actions"
+          git config --local user.name "AutoResearchClaw"
+          git add loop/state/ || true
+          git diff --staged --quiet || git commit -m "chore: update intel state $(date +%Y-%m-%d)"
+          git push || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

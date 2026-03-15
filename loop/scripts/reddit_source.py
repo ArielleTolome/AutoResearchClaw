@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""
+reddit_source.py — Reddit audience language miner for AutoResearchClaw
+Fetches hot/top posts from leadgen subreddits, scores with Codex CLI,
+writes to Baserow table 768, fires Discord embeds to #intel.
+
+Usage:
+  python reddit_source.py [--dry-run] [--limit N] [--subreddit NAME]
+"""
+
+import os, sys, json, re, time, hashlib, argparse, datetime, subprocess
+from pathlib import Path
+
+import requests
+import yaml
+
+# ── Config ───────────────────────────────────────────────────────────────────
+CFG_PATH = Path(__file__).parent.parent / "config" / "config.yaml"
+STATE_DIR = Path(__file__).parent.parent / "state"
+SEEN_PATH = STATE_DIR / "reddit_seen.json"
+
+def load_config() -> dict:
+    if CFG_PATH.exists():
+        return yaml.safe_load(CFG_PATH.read_text()) or {}
+    return {}
+
+CFG = load_config()
+BASEROW_KEY       = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_API_KEY", ""))
+INTEL_WEBHOOK     = CFG.get("discord", {}).get("intel_webhook_url", os.getenv("INTEL_WEBHOOK_URL", ""))
+BASEROW_TABLE     = 768
+BASEROW_URL       = f"https://api.baserow.io/api/database/rows/table/{BASEROW_TABLE}/?user_field_names=true"
+REDDIT_UA         = "AutoResearchClaw/1.9 audience-research"
+
+SUBREDDITS = [
+    "InsuranceAgent",
+    "legaladvice",
+    "personalfinance",
+    "Medicare",
+    "HealthInsurance",
+    "AutoInsurance",
+    "DebtFree",
+]
+
+EMOTION_COLORS = {
+    "Frustrated": 0xE74C3C,
+    "Confused":   0xE67E22,
+    "Anxious":    0xF1C40F,
+    "Hopeful":    0x2ECC71,
+    "Relieved":   0x1ABC9C,
+    "Angry":      0x8B0000,
+    "Neutral":    0x95A5A6,
+}
+
+SCORE_PROMPT = """Score this Reddit post for US leadgen audience research. Respond with ONLY a JSON object, nothing else.
+
+JSON schema:
+{{
+  "relevant": true or false,
+  "verbatim_hook": "the single most quotable sentence from this post that could become an ad hook — exact words",
+  "pain_point": "1 sentence summary of the core pain or desire",
+  "emotion": "one of: Frustrated | Confused | Angry | Relieved | Hopeful | Anxious | Neutral",
+  "vertical": "one of: Auto Insurance | Home Insurance | Medicare | Final Expense | ACA | U65 Private Health | Debt Settlement | Tax Settlement | Home Services | Personal Injury | Mass Tort | General Finance | Other",
+  "awareness_level": "one of: Unaware | Problem Aware | Solution Aware | Product Aware | Most Aware"
+}}
+
+Only mark relevant=true if this expresses a real pain point, desire, or struggle related to insurance, debt, legal issues, or personal finance.
+
+Post:
+Subreddit: r/{subreddit}
+Title: {title}
+Body: {body}"""
+
+
+# ── State management ─────────────────────────────────────────────────────────
+def load_seen() -> set:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    if SEEN_PATH.exists():
+        return set(json.loads(SEEN_PATH.read_text()))
+    return set()
+
+def save_seen(seen: set):
+    SEEN_PATH.write_text(json.dumps(list(seen)))
+
+
+# ── Reddit fetch ──────────────────────────────────────────────────────────────
+def fetch_posts(subreddit: str, limit: int = 25) -> list[dict]:
+    posts = []
+    headers = {"User-Agent": REDDIT_UA}
+    endpoints = [
+        f"https://www.reddit.com/r/{subreddit}/hot.json?limit={limit}",
+        f"https://www.reddit.com/r/{subreddit}/top.json?t=month&limit={limit}",
+    ]
+    for url in endpoints:
+        try:
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code == 429:
+                time.sleep(5)
+                r = requests.get(url, headers=headers, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            for child in data.get("data", {}).get("children", []):
+                p = child.get("data", {})
+                if p.get("is_self") is False and not p.get("selftext"):
+                    continue  # skip link-only posts with no body
+                posts.append({
+                    "title":       p.get("title", ""),
+                    "body":        (p.get("selftext") or "")[:500],
+                    "score":       p.get("score", 0),
+                    "num_comments": p.get("num_comments", 0),
+                    "url":         f"https://reddit.com{p.get('permalink', '')}",
+                    "subreddit":   subreddit,
+                    "created_utc": p.get("created_utc", 0),
+                })
+            time.sleep(1)  # be polite
+        except Exception as e:
+            print(f"  [WARN] Reddit fetch failed for r/{subreddit}: {e}")
+    # dedupe within batch by url
+    seen_urls = set()
+    unique = []
+    for p in posts:
+        if p["url"] not in seen_urls:
+            seen_urls.add(p["url"])
+            unique.append(p)
+    return unique
+
+
+# ── Scoring via Codex CLI ─────────────────────────────────────────────────────
+def score_post(post: dict) -> dict | None:
+    prompt = SCORE_PROMPT.format(
+        subreddit=post["subreddit"],
+        title=post["title"],
+        body=post["body"] or "(no body)",
+    )
+    try:
+        result = subprocess.run(
+            ["codex", "exec", "-c", "model=gpt-5.3-codex", "-c", "approval_policy=never", "-"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        output = result.stdout.strip()
+        json_matches = re.findall(r'\{[^{}]+\}', output, re.DOTALL)
+        if not json_matches:
+            return None
+        scored = json.loads(json_matches[-1])
+        if not scored.get("relevant"):
+            return None
+        return scored
+    except subprocess.TimeoutExpired:
+        print(f"  [WARN] Codex timeout on post: {post['title'][:50]}")
+        return None
+    except Exception as e:
+        print(f"  [WARN] Scoring failed: {e}")
+        return None
+
+
+# ── Baserow write ─────────────────────────────────────────────────────────────
+def write_to_baserow(post: dict, scored: dict, dry_run: bool) -> bool:
+    row = {
+        "subreddit":      post["subreddit"],
+        "title":          post["title"][:255],
+        "pain_point":     scored.get("pain_point", "")[:500],
+        "verbatim_hook":  scored.get("verbatim_hook", "")[:500],
+        "emotion":        scored.get("emotion", "Neutral"),
+        "vertical":       scored.get("vertical", "Other"),
+        "awareness_level": scored.get("awareness_level", ""),
+        "score":          post["score"],
+        "num_comments":   post["num_comments"],
+        "url":            post["url"],
+        "created_date":   datetime.datetime.utcfromtimestamp(post["created_utc"]).strftime("%Y-%m-%d"),
+    }
+    if dry_run:
+        print(f"    [DRY-RUN] Would write to Baserow: {row['title'][:60]}")
+        return True
+    try:
+        r = requests.post(
+            BASEROW_URL,
+            headers={"Authorization": f"Token {BASEROW_KEY}", "Content-Type": "application/json"},
+            json=row,
+            timeout=15,
+        )
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        print(f"  [WARN] Baserow write failed: {e}")
+        return False
+
+
+# ── Discord embed ─────────────────────────────────────────────────────────────
+def fire_discord(post: dict, scored: dict, dry_run: bool):
+    if not INTEL_WEBHOOK:
+        print("  [WARN] No intel_webhook_url configured — skipping Discord")
+        return
+    hook = (scored.get("verbatim_hook") or post["title"])[:256]
+    color = EMOTION_COLORS.get(scored.get("emotion", "Neutral"), 0x95A5A6)
+    embed = {
+        "title":       hook,
+        "description": scored.get("pain_point", "")[:500],
+        "color":       color,
+        "footer":      {"text": f"r/{post['subreddit']} · {post['score']} upvotes · {scored.get('awareness_level','')}"},
+        "url":         post["url"],
+        "timestamp":   datetime.datetime.utcnow().isoformat(),
+    }
+    if dry_run:
+        print(f"    [DRY-RUN] Discord: {hook[:60]}")
+        return
+    try:
+        requests.post(INTEL_WEBHOOK, json={"embeds": [embed]}, timeout=10)
+    except Exception as e:
+        print(f"  [WARN] Discord post failed: {e}")
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--limit", type=int, default=5, help="Max posts per subreddit to score")
+    parser.add_argument("--subreddit", help="Run only this subreddit")
+    args = parser.parse_args()
+
+    seen = load_seen()
+    subs = [args.subreddit] if args.subreddit else SUBREDDITS
+    total_new = 0
+
+    for sub in subs:
+        print(f"\n[r/{sub}]")
+        posts = fetch_posts(sub)
+        new_posts = [p for p in posts if p["url"] not in seen]
+        print(f"  {len(posts)} fetched, {len(new_posts)} new")
+
+        scored_count = 0
+        for post in new_posts:
+            if scored_count >= args.limit:
+                break
+            seen.add(post["url"])
+            scored = score_post(post)
+            if not scored:
+                print(f"  [skip] {post['title'][:60]}")
+                continue
+            print(f"  [+] {scored.get('emotion')} | {scored.get('vertical')} | {post['title'][:50]}")
+            write_to_baserow(post, scored, args.dry_run)
+            fire_discord(post, scored, args.dry_run)
+            scored_count += 1
+            total_new += 1
+            time.sleep(0.5)
+
+        save_seen(seen)
+        print(f"  → {scored_count} relevant posts processed")
+
+    print(f"\n✅ Done — {total_new} audience signals written")
+
+
+if __name__ == "__main__":
+    main()
