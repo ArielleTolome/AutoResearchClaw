@@ -122,6 +122,56 @@ def append_to_learnings(cycle_num: int, winner: dict, analysis: str):
     print(f"[ANALYZE] Appended cycle {cycle_num} learnings to learnings.md")
 
 
+def store_to_qdrant(cycle_num: int, winner: dict, analysis: str, config: dict):
+    """Store cycle learnings into the configured Qdrant collection."""
+    import uuid
+    from openai import OpenAI
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import PointStruct
+
+    qdrant_cfg = config.get("qdrant", {})
+    qdrant_url = qdrant_cfg.get("url", "http://37.27.228.106:6333")
+    collection = qdrant_cfg.get("collection", "rachel-memories")
+    openai_key = qdrant_cfg.get("openai_api_key", "")
+
+    if not openai_key:
+        print("[ANALYZE] Qdrant enabled but no OpenAI API key configured; skipping store")
+        return
+
+    winner_name = winner["ad_name"] if winner else "No winner"
+    memory_text = (
+        f"[AutoLoop Cycle {cycle_num}] Offer: {config['offer']['name']} | "
+        f"Platform: {config['offer'].get('platform', 'meta')} | "
+        f"Winner: {winner_name} | "
+        f"Learnings: {analysis[:500]}"
+    )
+
+    client = OpenAI(api_key=openai_key)
+    embedding_resp = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=memory_text,
+    )
+    vector = embedding_resp.data[0].embedding
+
+    qdrant_client = QdrantClient(url=qdrant_url)
+    qdrant_client.upsert(
+        collection_name=collection,
+        points=[PointStruct(
+            id=str(uuid.uuid4()),
+            vector=vector,
+            payload={
+                "text": memory_text,
+                "cycle": cycle_num,
+                "offer": config["offer"]["name"],
+                "winner": winner_name,
+                "timestamp": datetime.now().isoformat(),
+                "source": "auto_loop",
+            },
+        )],
+    )
+    print(f"[ANALYZE] Stored cycle {cycle_num} learnings to Qdrant ({collection})")
+
+
 def get_cycle_number() -> int:
     runs = list(RUNS_DIR.glob("*_harvest.json"))
     return len(runs)
@@ -158,6 +208,8 @@ def analyze(ads: list[dict], dry_run: bool = False) -> dict:
     # Log to learnings
     cycle_num = get_cycle_number()
     append_to_learnings(cycle_num, winner, analysis)
+    if config.get("qdrant", {}).get("enabled", False):
+        store_to_qdrant(cycle_num, winner, analysis, config)
 
     # Save run result
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

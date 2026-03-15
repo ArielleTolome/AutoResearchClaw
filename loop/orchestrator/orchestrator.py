@@ -31,6 +31,7 @@ from harvest import harvest
 from analyze import analyze
 from generate import generate_challenger
 from deploy import deploy
+from gate import run_gate
 
 CONFIG_PATH = ROOT / "config" / "config.yaml"
 RUNS_DIR = ROOT / "learnings" / "runs"
@@ -82,6 +83,15 @@ def run_full_loop(dry_run: bool = False, adset_id: str = "", image_hash: str = "
     # ── STEP 3: GENERATE ──────────────────────────────────────────────────────
     log("STEP 3: GENERATE")
     challenger_brief = generate_challenger(winner, dry_run=dry_run)
+
+    # ── STEP 3.5: APPROVAL GATE ──────────────────────────────────────────────
+    log("STEP 3.5: APPROVAL GATE")
+    should_deploy = run_gate(challenger_brief, dry_run=dry_run)
+
+    if not should_deploy:
+        log("Challenger was rejected or timed out. Skipping deploy this cycle.")
+        log(f"Challenger brief saved: {get_latest_run_file('*_challenger.md')}")
+        return
 
     # ── STEP 4: DEPLOY ────────────────────────────────────────────────────────
     log("STEP 4: DEPLOY")

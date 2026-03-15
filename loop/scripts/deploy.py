@@ -120,6 +120,49 @@ def send_slack_notification(config: dict, message: str):
     requests.post(webhook, json={"text": message})
 
 
+def send_discord_notification(config: dict, message: str, embed: dict = None):
+    """Post cycle summary to Discord channel via webhook."""
+    webhook_url = config.get("notifications", {}).get("discord_webhook", "")
+    if not webhook_url:
+        return
+
+    payload = {"content": message}
+    if embed:
+        payload["embeds"] = [embed]
+
+    resp = requests.post(webhook_url, json=payload)
+    if resp.status_code not in (200, 204):
+        print(f"[DEPLOY] Discord notify failed: {resp.status_code}")
+    else:
+        print("[DEPLOY] Discord notification sent")
+
+
+def build_discord_embed(parsed: dict, result: dict, kill_list: list, cycle: int, config: dict) -> dict:
+    """Build a Discord embed card for the cycle summary."""
+    color = 0x00FF88
+    return {
+        "title": f"🔄 AutoLoop Cycle {cycle} Complete",
+        "color": color,
+        "fields": [
+            {"name": "Offer", "value": config["offer"]["name"], "inline": True},
+            {"name": "Platform", "value": config["offer"].get("platform", "meta").upper(), "inline": True},
+            {"name": "New Challenger", "value": f"`{result['ad_name']}`", "inline": False},
+            {"name": "Angle", "value": parsed.get("angle", "—"), "inline": True},
+            {"name": "Hook Type", "value": parsed.get("hook_type", "—"), "inline": True},
+            {"name": "Awareness Stage", "value": parsed.get("awareness_stage", "—"), "inline": True},
+            {"name": "Hypothesis", "value": parsed.get("hypothesis", "—")[:200], "inline": False},
+            {"name": "Hook Preview", "value": f"\"{parsed.get('hook', '—')[:100]}\"", "inline": False},
+            {"name": "Ads Killed", "value": str(len(kill_list)), "inline": True},
+            {
+                "name": "Status",
+                "value": "⏳ Pending Approval" if config.get("approval_gate", {}).get("enabled") else "✅ Deployed",
+                "inline": True,
+            },
+        ],
+        "footer": {"text": "AutoResearchClaw v1.0"},
+    }
+
+
 def deploy(challenger_brief: str, kill_list: list[str],
            adset_id: str, image_hash: str, link_url: str,
            dry_run: bool = False) -> dict:
@@ -167,6 +210,11 @@ def deploy(challenger_brief: str, kill_list: list[str],
         )
         send_slack_notification(config, msg)
         print("[DEPLOY] Slack notification sent")
+        send_discord_notification(
+            config,
+            "",
+            embed=build_discord_embed(parsed, result, kill_list, cycle, config),
+        )
 
     # Save run
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -43,3 +43,26 @@ notifications:
 
 # ── Frameworks Path ──────────────────────────────────────────────────────────
 frameworks_path: "../creative"      # Path to creative framework files
+
+# ── Discord Notifications ────────────────────────────────────────────────────
+# Add discord_webhook alongside slack_webhook in notifications section
+# discord_webhook: "YOUR_DISCORD_WEBHOOK_URL"
+# discord_channel_id: "1482366861650690200"  # #creative channel
+
+# ── Qdrant Memory ────────────────────────────────────────────────────────────
+qdrant:
+  enabled: false                    # Set true to enable cross-campaign memory
+  url: "http://37.27.228.106:6333"
+  collection: "rachel-memories"
+  openai_api_key: "YOUR_OPENAI_KEY"
+  recall_top_k: 5                   # How many memories to pull per cycle
+
+# ── Approval Gate ────────────────────────────────────────────────────────────
+approval_gate:
+  enabled: false                    # Set true to require Discord approval before deploy
+  bot_token: "YOUR_DISCORD_BOT_TOKEN"
+  channel_id: "1482366861650690200" # #creative channel
+  allowed_reactors: []              # Discord user IDs allowed to approve (empty = anyone)
+  timeout_hours: 4                  # Hours to wait before applying timeout_action
+  timeout_action: "kill"            # kill | deploy | skip_and_continue
+  poll_interval_seconds: 60         # How often to check for reactions
