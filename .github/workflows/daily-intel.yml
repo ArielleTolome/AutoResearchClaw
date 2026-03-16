@@ -56,7 +56,9 @@ jobs:
 
           llm:
             provider: "anthropic"
-            model: "claude-sonnet-4-6"
+            model: "MiniMax-M2.5-highspeed"
+            base_url: "https://api.minimax.io/anthropic"
+            api_key: "${{ secrets.MINIMAX_API_KEY }}"
 
           qdrant:
             enabled: false
@@ -162,7 +164,9 @@ jobs:
 
           llm:
             provider: "anthropic"
-            model: "claude-sonnet-4-6"
+            model: "MiniMax-M2.5-highspeed"
+            base_url: "https://api.minimax.io/anthropic"
+            api_key: "${{ secrets.MINIMAX_API_KEY }}"
 
           qdrant:
             enabled: false
