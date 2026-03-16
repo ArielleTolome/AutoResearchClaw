@@ -88,6 +88,8 @@ async def _run_script(script_name: str, args: list) -> tuple:
 async def _kimi(system: str, user: str, max_tokens: int = 2000) -> str:
     """Call the configured LLM/agent (anthropic, openai, codex, or claude-code)."""
     try:
+        import sys, pathlib
+        sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "scripts"))
         from agent_runner import run_prompt as _ar_run
     except ImportError:
         return "⚠️ agent_runner not available — check loop/scripts/agent_runner.py"
@@ -1476,6 +1478,8 @@ async def competitor_spy(
 async def provider_cmd(interaction: discord.Interaction):
     """Display current provider info from config.yaml."""
     try:
+        import sys, pathlib
+        sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "scripts"))
         from agent_runner import get_provider_info
         info = get_provider_info(config=CFG)
     except ImportError:
