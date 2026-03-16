@@ -198,7 +198,7 @@ def fire_discord(ad: dict, scored: dict, dry_run: bool):
             {"name": "Analysis",       "value": scored.get("hook_summary", "")[:200],      "inline": False},
         ],
         "footer":    {"text": scored.get("vertical", "")},
-        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     if ad.get("snapshot_url"):
         embed["url"] = ad["snapshot_url"]

@@ -192,7 +192,7 @@ def _post_to_discord(ads: list[dict]):
             "color": FRESHNESS_COLOR.get(ad["freshness"], 0x95A5A6),
             "fields": fields,
             "footer": {"text": f"Meta Ad Library · {ad['freshness']} · AutoResearchClaw v2.0"},
-            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
         # Remove None description
         embed = {k: v for k, v in embed.items() if v is not None}

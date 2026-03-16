@@ -87,12 +87,21 @@ async def _run_script(script_name: str, args: list) -> tuple:
 
 async def _kimi(system: str, user: str, max_tokens: int = 2000) -> str:
     import anthropic as _ant
-    client = _ant.Anthropic(api_key=CFG["llm"]["api_key"], base_url=CFG["llm"]["base_url"])
+    llm_cfg = CFG.get("llm") or {}
+    api_key = llm_cfg.get("api_key") or os.getenv("ANTHROPIC_API_KEY", "")
+    base_url = llm_cfg.get("base_url") or None
+    model = llm_cfg.get("model", "claude-3-5-haiku-20241022")
+    if not api_key:
+        return "⚠️ No LLM API key configured in config.yaml (llm.api_key)."
+    client_kwargs = {"api_key": api_key}
+    if base_url:
+        client_kwargs["base_url"] = base_url
+    client = _ant.Anthropic(**client_kwargs)
     loop = asyncio.get_event_loop()
     try:
         resp = await asyncio.wait_for(
             loop.run_in_executor(None, lambda: client.messages.create(
-                model=CFG["llm"]["model"], max_tokens=max_tokens,
+                model=model, max_tokens=max_tokens,
                 system=system, messages=[{"role":"user","content":user}]
             )),
             timeout=120,  # 2 min hard cap — well within Discord's 15 min followup window
@@ -135,25 +144,6 @@ def _notion_link_view(notion_url: str) -> discord.ui.View:
         emoji="📓",
     ))
     return view
-
-
-async def _post_compact_card(interaction, title: str, content: str,
-                              notion_url: str | None, color: int,
-                              fields: list | None = None):
-    """
-    Post a compact summary card to Discord.
-    Full content lives in Notion — Discord gets a 2-3 line summary + button.
-    """
-    summary = _extract_summary(content)
-    embed = discord.Embed(title=title, description=summary, color=color)
-    if fields:
-        for name, value, inline in fields:
-            embed.add_field(name=name, value=value[:1024], inline=inline)
-    if notion_url:
-        embed.add_field(name="📓 Full Output", value=f"[View in Notion]({notion_url})", inline=False)
-    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
-    view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
-    await interaction.followup.send(embed=embed, view=view)
 
 
 # ── Signal card buttons ──────────────────────────────────────────────────────

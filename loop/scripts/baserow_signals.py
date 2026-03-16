@@ -119,7 +119,7 @@ def build_news_embed(row):
         "color": color,
         "fields": fields,
         "footer": {"text": f"{sent_emoji} Sentiment: {sentiment}  |  Impact: {impact}  |  AutoResearchClaw"},
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
     }
 
 def build_sentiment_digest(rows):
@@ -154,7 +154,7 @@ def build_sentiment_digest(rows):
         "color": 0x3498db,
         "fields": fields,
         "footer": {"text": "AutoResearchClaw | Baserow sync"},
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
     }
 
 # ── Modes ────────────────────────────────────────────────────────────────────
