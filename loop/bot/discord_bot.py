@@ -104,6 +104,46 @@ async def _post_embed(interaction, title, description, color):
         await interaction.followup.send(embed=discord.Embed(description=chunk, color=color))
 
 
+def _extract_summary(content: str, max_chars: int = 280) -> str:
+    """Pull first meaningful paragraph from output as a summary snippet."""
+    lines = [l.strip() for l in content.split("\n") if l.strip() and not l.startswith("#")]
+    snippet = " ".join(lines)[:max_chars]
+    if len(snippet) == max_chars:
+        snippet = snippet.rsplit(" ", 1)[0] + "…"
+    return snippet or content[:max_chars]
+
+
+def _notion_link_view(notion_url: str) -> discord.ui.View:
+    """Return a View with a single 'Open in Notion' link button."""
+    view = discord.ui.View(timeout=None)
+    view.add_item(discord.ui.Button(
+        label="Open in Notion",
+        style=discord.ButtonStyle.link,
+        url=notion_url,
+        emoji="📓",
+    ))
+    return view
+
+
+async def _post_compact_card(interaction, title: str, content: str,
+                              notion_url: str | None, color: int,
+                              fields: list | None = None):
+    """
+    Post a compact summary card to Discord.
+    Full content lives in Notion — Discord gets a 2-3 line summary + button.
+    """
+    summary = _extract_summary(content)
+    embed = discord.Embed(title=title, description=summary, color=color)
+    if fields:
+        for name, value, inline in fields:
+            embed.add_field(name=name, value=value[:1024], inline=inline)
+    if notion_url:
+        embed.add_field(name="📓 Full Output", value=f"[View in Notion]({notion_url})", inline=False)
+    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+    view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
+    await interaction.followup.send(embed=embed, view=view)
+
+
 # ── Signal card buttons ──────────────────────────────────────────────────────
 
 class SignalCardView(discord.ui.View):
@@ -310,26 +350,25 @@ async def on_interaction(interaction: discord.Interaction):
         else:
             result_text = stdout.decode() or "No output generated."
 
-        # Build result embed (chunk if >4000 chars)
+        # Extract Notion URL from action_handler stdout (line: "[action] 📓 Notion page: <url>")
+        notion_url = None
+        notion_match = re.search(r'Notion page:\s*(https://www\.notion\.so/\S+)', stdout.decode())
+        if notion_match:
+            notion_url = notion_match.group(1)
+
+        # Build compact summary card — full content lives in Notion
+        summary = _extract_summary(result_text)
         result_embed = discord.Embed(
             title=f"{emoji} {label}: {signal_headline[:60]}",
-            description=result_text[:4000],
+            description=summary,
             color=0x5865F2,
         )
-        result_embed.set_footer(text="AutoResearchClaw v2.1 · Powered by Kimi M2.5")
+        if notion_url:
+            result_embed.add_field(name="📓 Full Output", value=f"[View in Notion]({notion_url})", inline=False)
+        result_embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
 
-        await interaction.edit_original_response(content=None, embed=result_embed)
-
-        # Post overflow chunks if result is longer than 4000 chars
-        if len(result_text) > 4000:
-            overflow_chunks = [result_text[i:i + 4000] for i in range(4000, len(result_text), 4000)]
-            for chunk in overflow_chunks:
-                overflow_embed = discord.Embed(
-                    title=f"{emoji} {label} (continued)",
-                    description=chunk,
-                    color=0x5865F2,
-                )
-                await interaction.followup.send(embed=overflow_embed)
+        view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
+        await interaction.edit_original_response(content=None, embed=result_embed, view=view)
 
         log.info(f"Completed {label} for signal {signal_id}")
 
@@ -402,7 +441,28 @@ async def research(interaction: discord.Interaction, topic: str, platform: str =
         ),
     )
 
-    await _post_embed(interaction, f"🔍 Research: {topic}", synthesis, 0x2F80ED)
+    # Save to Notion and post compact card
+    notion_url = None
+    try:
+        from notion_sink import write_intel as _ni
+        signal = {"headline": f"Research: {topic}", "vertical": "Other",
+                  "summary": _extract_summary(synthesis), "source": "Research", "emotion": "Neutral"}
+        notion_url = _ni(signal)
+    except Exception as e:
+        log.warning(f"Notion write failed: {e}")
+
+    # Pull out the 3 pain points as a preview
+    pain_match = re.findall(r'(?:\d+\.\s+)(.{20,120})', synthesis)
+    preview = "\n".join(f"• {p.strip()}" for p in pain_match[:3]) or _extract_summary(synthesis, 280)
+
+    await _post_compact_card(
+        interaction,
+        title=f"🔍 Research: {topic}",
+        content=synthesis,
+        notion_url=notion_url,
+        color=0x2F80ED,
+        fields=[("Key Findings", preview, False), ("Platform", platform.title(), True)],
+    )
 
     # Also generate signal cards
     await _run_script("signal_cards.py", ["--output", "loop/output/"])
@@ -434,7 +494,23 @@ async def full_brief(interaction: discord.Interaction, topic: str, platform: str
         max_tokens=3000,
     )
 
-    await _post_embed(interaction, f"📋 Full Brief: {topic}", brief, 0x27AE60)
+    # Save to Notion and post compact card
+    notion_url = None
+    try:
+        from notion_sink import write_brief as _nb
+        signal = {"headline": topic, "vertical": "Other", "summary": _extract_summary(brief), "signal_id": ""}
+        notion_url = _nb(signal, brief, platform)
+    except Exception as e:
+        log.warning(f"Notion write failed: {e}")
+
+    await _post_compact_card(
+        interaction,
+        title=f"📋 Full Brief: {topic}",
+        content=brief,
+        notion_url=notion_url,
+        color=0x27AE60,
+        fields=[("Platform", platform.title(), True), ("Awareness", "See Notion →", True)],
+    )
 
 
 # ── 3. /gen-hooks ────────────────────────────────────────────────────────────
@@ -458,7 +534,31 @@ async def gen_hooks(interaction: discord.Interaction, topic: str, awareness_stag
         max_tokens=2500,
     )
 
-    await _post_embed(interaction, f"🎣 Hook Bank: {topic}", hooks, 0xF39C12)
+    # Save to Notion and post compact card
+    notion_url = None
+    try:
+        from notion_sink import write_hooks as _nh
+        signal = {"headline": topic, "vertical": "Other", "summary": _extract_summary(hooks), "signal_id": ""}
+        notion_url = _nh(signal, hooks, "meta")
+    except Exception as e:
+        log.warning(f"Notion write failed: {e}")
+
+    # Show top 3 hooks as a preview field
+    hook_lines = re.findall(r'\*\*#\d+.*?\*\*.*?\n(.+)', hooks)
+    preview = "\n".join(f"• {h.strip()}" for h in hook_lines[:3]) or _extract_summary(hooks, 200)
+
+    await _post_compact_card(
+        interaction,
+        title=f"🎣 Hook Bank: {topic}",
+        content=hooks,
+        notion_url=notion_url,
+        color=0xF39C12,
+        fields=[
+            ("Top Hooks Preview", preview, False),
+            ("Stage", awareness_stage.replace("-", " ").title(), True),
+            ("Count", "20 hooks", True),
+        ],
+    )
 
 
 # ── 4. /spy ──────────────────────────────────────────────────────────────────
