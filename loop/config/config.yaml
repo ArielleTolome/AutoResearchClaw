@@ -82,3 +82,11 @@ qdrant:
 
 # ── Frameworks Path ───────────────────────────────────────────────────────────
 frameworks_path: "../creative"
+
+# ── Creative Loop Settings (80/20 Rule) ───────────────────────────────────────
+iteration_ratio: 0.8   # 80% iterate proven concepts, 20% fresh
+
+# ── Concept Vault ─────────────────────────────────────────────────────────────
+concept_vault:
+  enabled: true
+  local_path: "loop/learnings/concept_vault.json"

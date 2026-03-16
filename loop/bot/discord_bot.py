@@ -413,6 +413,20 @@ AWARENESS_CHOICES = [
     app_commands.Choice(name="5-most-aware", value="5-most-aware"),
 ]
 
+BATCH_PLATFORM_CHOICES = [
+    app_commands.Choice(name="Meta", value="meta"),
+    app_commands.Choice(name="TikTok", value="tiktok"),
+    app_commands.Choice(name="Native", value="native"),
+    app_commands.Choice(name="YouTube", value="youtube"),
+]
+
+BATCH_SIZE_CHOICES = [
+    app_commands.Choice(name="15 ads (3 concepts × 5 hooks)", value="15"),
+    app_commands.Choice(name="45 ads (+ 3 actors)", value="45"),
+    app_commands.Choice(name="90 ads (+ music variations)", value="90"),
+    app_commands.Choice(name="180 ads (full matrix)", value="180"),
+]
+
 
 # ── 1. /research ─────────────────────────────────────────────────────────────
 
@@ -755,6 +769,86 @@ async def intel_digest(interaction: discord.Interaction):
     except Exception as e:
         log.error(f"/intel-digest error: {e}")
         await interaction.edit_original_response(content=f"❌ Intel digest failed: {str(e)[:200]}")
+
+
+# ── 9. /batch ────────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="batch", description="Generate a full batch of ad variations (15-180 unique ads)")
+@app_commands.describe(
+    topic="Topic or offer description",
+    concept_id="Concept vault ID (e.g. c001) — overrides topic",
+    platform="Ad platform",
+    batch_size="How many unique ads to generate",
+)
+@app_commands.choices(platform=BATCH_PLATFORM_CHOICES, batch_size=BATCH_SIZE_CHOICES)
+async def batch(interaction: discord.Interaction, topic: str, concept_id: str = "", platform: str = "meta", batch_size: str = "15"):
+    await interaction.response.send_message(f"⚙️ Building **{batch_size}-ad batch** for **{topic or concept_id}** ({platform})…")
+
+    args = ["--topic", topic, "--platform", platform, "--batch-size", batch_size]
+    if concept_id:
+        args = ["--concept-id", concept_id, "--platform", platform, "--batch-size", batch_size]
+
+    rc, out = await _run_script("batch_generator.py", args)
+
+    # Extract summary from output
+    summary = out[-2000:] if len(out) > 2000 else out
+    # Try to find the multiplication table line
+    total_match = re.search(r'(\d+)\s+unique ads?', out, re.IGNORECASE)
+    total_ads = total_match.group(0) if total_match else batch_size + " ads"
+
+    status = "✅" if rc == 0 else "❌"
+    embed = discord.Embed(
+        title=f"⚙️ Batch: {topic or concept_id}",
+        description=f"{status} Generated **{total_ads}**\n\n```{summary[:1500]}```",
+        color=0x9B59B6,
+    )
+    embed.add_field(name="Platform", value=platform.title(), inline=True)
+    embed.add_field(name="Target Size", value=batch_size + " ads", inline=True)
+    embed.set_footer(text="AutoResearchClaw v2.3 · The Batch Machine")
+    try:
+        await interaction.edit_original_response(content=None, embed=embed)
+    except Exception:
+        await interaction.followup.send(embed=embed)
+
+
+# ── 10. /concept-status ───────────────────────────────────────────────────────
+
+@bot.tree.command(name="concept-status", description="Show the concept vault — proven concepts, testing, ready to iterate")
+async def concept_status(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    vault_path = Path(__file__).parent.parent / "learnings" / "concept_vault.json"
+    if not vault_path.exists():
+        await interaction.followup.send("📭 No concept vault found. Use `/batch` to start building concepts.")
+        return
+
+    import json as _json
+    concepts = _json.loads(vault_path.read_text())
+
+    proven = [c for c in concepts if c["status"] in ("proven", "scaling")]
+    testing = [c for c in concepts if c["status"] == "testing"]
+    dead = [c for c in concepts if c["status"] == "dead"]
+
+    embed = discord.Embed(title="🧠 Concept Vault", color=0x27AE60)
+
+    if proven:
+        lines = []
+        for c in proven:
+            hr = f"{c['hook_rate_best']:.0%}" if c.get("hook_rate_best") else "—"
+            ctr = f"{c['ctr_best']:.1%}" if c.get("ctr_best") else "—"
+            lines.append(f"**{c['concept_id']}** {c['name'][:40]}\n↳ Batches: {c['batch_count']} | Hook Rate: {hr} | CTR: {ctr}")
+        embed.add_field(name=f"✅ Proven / Scaling ({len(proven)})", value="\n\n".join(lines)[:1024], inline=False)
+
+    if testing:
+        lines = []
+        for c in testing:
+            lines.append(f"**{c['concept_id']}** {c['name'][:40]} — {c['batch_count']} batch(es)")
+        embed.add_field(name=f"🧪 Testing ({len(testing)})", value="\n".join(lines)[:1024], inline=False)
+
+    total = len(concepts)
+    embed.set_footer(text=f"Total: {total} concepts ({len(dead)} dead) · 80% iteration / 20% new")
+
+    await interaction.followup.send(embed=embed)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────

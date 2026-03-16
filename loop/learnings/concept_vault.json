@@ -1,0 +1,50 @@
+[
+  {
+    "concept_id": "c001",
+    "name": "Person UGC — 'I just found out I qualify'",
+    "description": "Front-facing person talking to camera, casual UGC style, sharing personal discovery moment that they qualify for stimulus assistance. Relatable, authentic, problem-aware hook.",
+    "vertical": "stimulus_assistance",
+    "platform": "meta",
+    "status": "testing",
+    "batch_count": 0,
+    "hook_rate_best": null,
+    "ctr_best": null,
+    "cpa_best": null,
+    "winning_hook_types": [],
+    "created_at": "2026-03-16",
+    "last_iterated": null,
+    "notes": "Seed concept. Test first."
+  },
+  {
+    "concept_id": "c002",
+    "name": "Shocking Stat — Millions don't know they qualify",
+    "description": "Bold on-screen stat hook: 'X million Americans are leaving free stimulus money unclaimed.' AI voice or text overlay. B-roll of everyday Americans. Problem-aware agitation angle.",
+    "vertical": "stimulus_assistance",
+    "platform": "meta",
+    "status": "testing",
+    "batch_count": 0,
+    "hook_rate_best": null,
+    "ctr_best": null,
+    "cpa_best": null,
+    "winning_hook_types": [],
+    "created_at": "2026-03-16",
+    "last_iterated": null,
+    "notes": "Seed concept. High-volume stat angle."
+  },
+  {
+    "concept_id": "c003",
+    "name": "Before/After Story — Struggling to Found Program",
+    "description": "Testimonial-style UGC. Person shares their before state (bills stacking up, didn't know where to turn), discovery moment, and after state (qualified, got assistance, relief). Emotional transformation arc.",
+    "vertical": "stimulus_assistance",
+    "platform": "meta",
+    "status": "testing",
+    "batch_count": 0,
+    "hook_rate_best": null,
+    "ctr_best": null,
+    "cpa_best": null,
+    "winning_hook_types": [],
+    "created_at": "2026-03-16",
+    "last_iterated": null,
+    "notes": "Seed concept. Emotional angle — test at Stage 2 awareness."
+  }
+]
