@@ -54,6 +54,8 @@ discord:
   channel_id: "1482366861650690200"
   competitor_webhook_url: "https://discord.com/api/webhooks/1482864347221983445/JzCfCOiHhTdTuWW-0_hnRtLv8RkG_EpUCdRDVfG4e3bZadz5EJuVgqm9uUb-YCE3OVCG"
   competitor_channel_id: "1482366861650690200"
+  bot_token: ""  # Set via DISCORD_BOT_TOKEN env var or GitHub Actions secret
+  signal_channel_id: "1482849535473614848"     # #creative-signals channel
 
 # ── Approval Gate ─────────────────────────────────────────────────────────────
 approval_gate:
