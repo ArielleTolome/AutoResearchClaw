@@ -109,3 +109,12 @@ win_automation:
   hook_swap_on_win: true
   actor_swap_on_win: true
   notify_discord: true
+
+# ── Gemini Video Intelligence (v2.5) ─────────────────────────────────────────
+gemini:
+  enabled: true
+  binary: "gemini"                  # path to gemini CLI binary
+  model: "gemini-2.5-pro"           # default model
+  video_download_dir: "/tmp"        # where to download videos before analysis
+  max_video_size_mb: 100            # skip videos larger than this
+  competitor_spy_limit: 5           # max ads per competitor_video_spy run
