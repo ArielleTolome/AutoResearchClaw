@@ -1,6 +1,28 @@
 # AutoResearchClaw Changelog
 
-## v2.0.0 — 2026-03-15
+## [2.0.0] — 2026-03-15
+
+### 🎯 Intel-to-Brief in One Click
+
+#### New: `action_handler.py`
+- **5 creative actions** runnable against any signal: Brief, Persona, Hooks, Script, Image Concepts
+- Claude claude-sonnet-4-6 generates each asset with action-specific prompts rooted in ACA doctrine
+- Fetches signal from Baserow (tables 767/818/813), calls Anthropic API, posts embed to Discord
+- CLI: `python action_handler.py --signal-id <id> --action generate_brief`
+- Flags: `--dry-run` (print only), `--output` (save to file), `--webhook-url` (override)
+
+#### Updated: `signal_cards.py`
+- New `--post` flag: pushes signal card embeds directly to Discord via webhook
+- Each card becomes a color-coded embed (by emotion) with signal context
+
+#### Infrastructure
+- Qdrant API key wired in `qdrant_sink.py` — signals now embed into `autoresearch-signals` collection
+- `competitor_watcher.py` parser fixed: Anstrex response now correctly read from `data.data` path
+- `qdrant.api_key` field added to `loop/config/config.yaml` schema
+
+---
+
+## v2.0.0-alpha — 2026-03-15
 
 ### Added
 - **Qdrant Memory Layer** (`loop/scripts/qdrant_sink.py`) — signal vectorization and semantic search

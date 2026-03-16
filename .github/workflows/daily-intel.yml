@@ -118,6 +118,13 @@ jobs:
         working-directory: loop/scripts
         run: python signal_cards.py
 
+      - name: Post signal cards to Discord
+        if: inputs.step == 'all' || inputs.step == 'digest' || inputs.step == ''
+        working-directory: loop/scripts
+        run: python signal_cards.py --post
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_CREATIVE_SIGNALS_WEBHOOK }}
+
       - name: Persist state and output
         if: always()
         run: |
