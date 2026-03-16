@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -96,7 +96,7 @@ def score_angle_fatigue(
         print("[FATIGUE] No intel ads to analyze")
         return {}
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Group ads by angle
     by_angle: dict[str, list[dict]] = {}

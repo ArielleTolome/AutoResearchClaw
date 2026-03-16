@@ -188,7 +188,7 @@ def write_to_baserow(post: dict, scored: dict, dry_run: bool) -> bool:
         "score":          post["score"],
         "num_comments":   post["num_comments"],
         "url":            post["url"],
-        "created_date":   datetime.datetime.utcfromtimestamp(post["created_utc"]).strftime("%Y-%m-%d"),
+        "created_date":   datetime.datetime.fromtimestamp(post["created_utc"], datetime.timezone.utc).strftime("%Y-%m-%d"),
     }
     if dry_run:
         print(f"    [DRY-RUN] Would write to Baserow: {row['title'][:60]}")
@@ -220,7 +220,7 @@ def fire_discord(post: dict, scored: dict, dry_run: bool):
         "color":       color,
         "footer":      {"text": f"r/{post['subreddit']} · {post['score']} upvotes · {scored.get('awareness_level','')}"},
         "url":         post["url"],
-        "timestamp":   datetime.datetime.utcnow().isoformat(),
+        "timestamp":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     if dry_run:
         print(f"    [DRY-RUN] Discord: {hook[:60]}")
@@ -268,7 +268,7 @@ def main():
                     "headline": post["title"],
                     "source_url": post["url"],
                     "source": f"r/{post['subreddit']}",
-                    "created_date": datetime.datetime.utcfromtimestamp(post["created_utc"]).strftime("%Y-%m-%d"),
+                    "created_date": datetime.datetime.fromtimestamp(post["created_utc"], datetime.timezone.utc).strftime("%Y-%m-%d"),
                     "signal_type": "reddit",
                 })
             scored_count += 1

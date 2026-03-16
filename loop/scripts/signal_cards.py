@@ -204,6 +204,7 @@ def main():
         return
 
     # Determine output path
+    date_str = datetime.date.today().strftime("%Y%m%d")  # always defined first
     if args.output:
         _op = Path(args.output)
         # If a directory was passed, auto-generate dated filename inside it
@@ -213,7 +214,6 @@ def main():
             out_path = _op
     else:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        date_str = datetime.date.today().strftime("%Y%m%d")
         out_path = OUTPUT_DIR / f"signal_cards_{date_str}.json"
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

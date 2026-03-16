@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 intel_digest.py — Daily morning digest for AutoResearchClaw
-Reads last 24h from Baserow tables 767 (news) and 768 (reddit),
+Reads last 24h from Baserow tables 767 (news) and 818 (reddit audience signals),
 builds a summary embed and posts to #intel.
 
 Usage:
@@ -117,7 +117,7 @@ def build_embed(news_rows: list[dict], reddit_rows: list[dict], date_str: str) -
         "color":       0x3498DB,
         "fields":      fields,
         "footer":      {"text": f"AutoResearchClaw v1.9 · {total} signals processed"},
-        "timestamp":   datetime.datetime.utcnow().isoformat(),
+        "timestamp":   datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
 
 

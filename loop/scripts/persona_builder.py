@@ -175,7 +175,7 @@ def post_to_discord(vertical: str, persona_md: str):
         "description": persona_md[:4000],
         "color": 0x9B59B6,
         "footer": {"text": "AutoResearchClaw v2.0 · persona_builder.py"},
-        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     try:
         r = requests.post(WEBHOOK_URL, json={"embeds": [embed]}, timeout=10)

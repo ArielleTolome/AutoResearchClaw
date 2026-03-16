@@ -18,7 +18,7 @@ Integration hooks (where each signal should be called from):
   - emit_loop_error      → orchestrator.py in exception handler
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
@@ -724,7 +724,7 @@ def emit_signal(signal_type: SignalType, config: dict, **kwargs) -> dict | None:
         return None
 
     card = CARD_BUILDERS[signal_type](**kwargs)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     # Support dynamic color override from card builders (e.g., NATIVE_ADVERTORIAL_CTR)
     color = card.pop("color_override", None) or SIGNAL_COLORS[signal_type]

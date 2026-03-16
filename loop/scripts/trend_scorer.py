@@ -163,7 +163,7 @@ def post_weekly_card(ranked: list[dict]):
         "description": "\n\n".join(lines),
         "color": 0xE74C3C,
         "footer": {"text": "AutoResearchClaw v2.0 · trend_scorer.py"},
-        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
 
     try:
