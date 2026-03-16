@@ -208,7 +208,9 @@ def run_action(action: str, signal: dict) -> str:
         system=system_prompt,
         messages=[{"role": "user", "content": user_msg}],
     )
-    return response.content[0].text
+    # Kimi (MiniMax) may return ThinkingBlock before TextBlock — grab the text block
+    text = next((b.text for b in response.content if hasattr(b, "text")), "")
+    return text
 
 
 # ── Discord posting ─────────────────────────────────────────────────────────

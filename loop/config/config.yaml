@@ -14,7 +14,7 @@ llm:
   provider: "anthropic"                        # Anthropic-compatible API
   model: "MiniMax-M2.5-highspeed"             # Kimi — fast + cheap (~10x vs Sonnet)
   base_url: "https://api.minimax.io/anthropic" # MiniMax Anthropic-compat endpoint
-  api_key: ""                                  # Uses MINIMAX_API_KEY or ANTHROPIC_API_KEY env var
+  api_key: "sk-cp-nQu15NEQ73aNdVIrk4X9KMWjC63H9a5IqHbjGOAkQyf69ZsLh7ZqPo-P6zj9ZC5roYBYYqOymr9OzmptfO67yp6MrthgZWYQunjvkBfUtzCh8w4OFdZ18B4"  # MiniMax Kimi Ultra
   # ── Fallback options ────────────────────────────────────────────────────────
   # model: "claude-sonnet-4-6"               # Anthropic Claude Sonnet (higher quality)
   # base_url: ~                              # unset = default Anthropic endpoint
