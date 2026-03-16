@@ -19,10 +19,10 @@ import requests
 import yaml
 
 try:
-    import anthropic
-    HAS_ANTHROPIC = True
+    from agent_runner import run_prompt as _agent_run_prompt
+    HAS_AGENT_RUNNER = True
 except ImportError:
-    HAS_ANTHROPIC = False
+    HAS_AGENT_RUNNER = False
 
 try:
     from notion_sink import write_action_output as notion_write, HUB_URL as NOTION_HUB_URL
@@ -186,12 +186,9 @@ def _format_signal_for_prompt(signal: dict) -> str:
 # ── Claude call ─────────────────────────────────────────────────────────────
 
 def run_action(action: str, signal: dict) -> str:
-    """Call Claude with the action-specific prompt and signal data."""
-    if not HAS_ANTHROPIC:
-        print("[action] anthropic package not installed — pip install anthropic")
-        sys.exit(1)
-    if not ANTHROPIC_API_KEY:
-        print("[action] No ANTHROPIC_API_KEY set")
+    """Call the configured LLM/agent with the action-specific prompt and signal data."""
+    if not HAS_AGENT_RUNNER:
+        print("[action] agent_runner not available — check loop/scripts/agent_runner.py")
         sys.exit(1)
 
     system_prompt = ACTION_PROMPTS[action]
@@ -205,19 +202,7 @@ def run_action(action: str, signal: dict) -> str:
     signal_text = _format_signal_for_prompt(signal)
     user_msg = f"Here is the audience signal:\n\n{signal_text}\n\nExecute the action now."
 
-    client_kwargs = {"api_key": ANTHROPIC_API_KEY}
-    if LLM_BASE_URL:
-        client_kwargs["base_url"] = LLM_BASE_URL
-    client = anthropic.Anthropic(**client_kwargs)
-    response = client.messages.create(
-        model=LLM_MODEL,
-        max_tokens=2000,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_msg}],
-    )
-    # Kimi (MiniMax) may return ThinkingBlock before TextBlock — grab the text block
-    text = next((b.text for b in response.content if hasattr(b, "text")), "")
-    return text
+    return _agent_run_prompt(system_prompt, user_msg, max_tokens=2000, config=CFG)
 
 
 # ── Discord posting ─────────────────────────────────────────────────────────

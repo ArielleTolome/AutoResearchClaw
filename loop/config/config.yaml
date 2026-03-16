@@ -11,14 +11,41 @@ meta:
 
 # ── LLM (Challenger Generator) ───────────────────────────────────────────────
 llm:
-  provider: "anthropic"                        # Anthropic-compatible API
+  provider: "anthropic"                        # Anthropic-compatible API (default; also works for minimax)
   model: "MiniMax-M2.5-highspeed"             # Kimi — fast + cheap (~10x vs Sonnet)
   base_url: "https://api.minimax.io/anthropic" # MiniMax Anthropic-compat endpoint
   api_key: "sk-cp-nQu15NEQ73aNdVIrk4X9KMWjC63H9a5IqHbjGOAkQyf69ZsLh7ZqPo-P6zj9ZC5roYBYYqOymr9OzmptfO67yp6MrthgZWYQunjvkBfUtzCh8w4OFdZ18B4"  # MiniMax Kimi Ultra
-  # ── Fallback options ────────────────────────────────────────────────────────
-  # model: "claude-sonnet-4-6"               # Anthropic Claude Sonnet (higher quality)
+
+  # ── Provider options (v2.6 Agent Mode) ─────────────────────────────────────
+  # Switch provider with ONE line. All scripts auto-route via agent_runner.py.
+
+  # Option 1: Anthropic Claude (direct API)
+  # provider: "anthropic"
+  # model: "claude-sonnet-4-6"
+  # api_key: "YOUR_ANTHROPIC_API_KEY"
   # base_url: ~                              # unset = default Anthropic endpoint
-  # model: "glm-4-plus"                      # GLM-5 via https://open.bigmodel.cn/api/paas/v4/
+
+  # Option 2: MiniMax Kimi (Anthropic-compat) — current default
+  # provider: "anthropic"                    # or "minimax" (alias)
+  # model: "MiniMax-M2.5-highspeed"
+  # base_url: "https://api.minimax.io/anthropic"
+  # api_key: "YOUR_MINIMAX_API_KEY"
+
+  # Option 3: OpenAI GPT (native API)
+  # provider: "openai"
+  # model: "gpt-4o"                          # or o3, gpt-4.1, etc.
+  # api_key: "YOUR_OPENAI_API_KEY"
+  # base_url: ~                              # unset = default OpenAI endpoint
+
+  # Option 4: Codex CLI agent (local subprocess — no API key needed)
+  # provider: "codex"
+  # model: "o4-mini"                         # Codex CLI model flag
+  # Requires: codex CLI on PATH (npm install -g @openai/codex)
+
+  # Option 5: Claude Code CLI agent (local subprocess — no API key needed)
+  # provider: "claude-code"
+  # model: ~                                 # model controlled by claude CLI config
+  # Requires: claude CLI on PATH (npm install -g @anthropic-ai/claude-code)
 
 # ── Loop Settings ────────────────────────────────────────────────────────────
 loop:

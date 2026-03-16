@@ -8,11 +8,36 @@ meta:
   app_id: "YOUR_APP_ID"
   app_secret: "YOUR_APP_SECRET"
 
-# ── LLM (Challenger Generator) ───────────────────────────────────────────────
+# ── LLM (Challenger Generator) — v2.6 Agent Mode ────────────────────────────
+# Switch provider with ONE line. All scripts route via loop/scripts/agent_runner.py.
 llm:
+  # ── Option 1: Anthropic Claude (direct API) — recommended for quality ───────
   provider: "anthropic"
-  model: "claude-opus-4-6"          # or claude-sonnet-4-6 for lower cost
+  model: "claude-sonnet-4-6"        # or claude-opus-4-6 for max quality
   api_key: "YOUR_ANTHROPIC_API_KEY"
+  # base_url: ~                     # unset = default Anthropic endpoint
+
+  # ── Option 2: MiniMax Kimi (Anthropic-compat, ~10x cheaper) ─────────────────
+  # provider: "anthropic"           # or "minimax" (alias, same code path)
+  # model: "MiniMax-M2.5-highspeed"
+  # api_key: "YOUR_MINIMAX_API_KEY"
+  # base_url: "https://api.minimax.io/anthropic"
+
+  # ── Option 3: OpenAI GPT (native OpenAI API) ─────────────────────────────────
+  # provider: "openai"
+  # model: "gpt-4o"                 # or o3, gpt-4.1-mini, etc.
+  # api_key: "YOUR_OPENAI_API_KEY"
+  # base_url: ~                     # unset = default OpenAI endpoint
+
+  # ── Option 4: Codex CLI agent (local subprocess, no API key) ─────────────────
+  # provider: "codex"
+  # model: "o4-mini"               # model flag passed to codex --model
+  # Requires: npm install -g @openai/codex && codex auth
+
+  # ── Option 5: Claude Code CLI agent (local subprocess, no API key) ───────────
+  # provider: "claude-code"
+  # model: ~                       # model controlled by claude CLI config
+  # Requires: npm install -g @anthropic-ai/claude-code && claude /login
 
 # ── Loop Settings ────────────────────────────────────────────────────────────
 loop:

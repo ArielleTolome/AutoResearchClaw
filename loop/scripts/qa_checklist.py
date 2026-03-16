@@ -204,16 +204,15 @@ def _apply_qa_result(row_id: int, passed: bool, failed_items: list, dry_run: boo
 
 def run_qa_with_kimi(row_id: int, platform: str = "meta") -> dict:
     """
-    Load job from Baserow, use Kimi to evaluate the job description against QA checks.
+    Load job from Baserow, use the configured LLM/agent to evaluate the job against QA checks.
     Returns {passed: bool, score: int, total: int, failed_items: list, notes: str}
     """
-    import anthropic as _ant
+    try:
+        from agent_runner import run_prompt as _qa_run_prompt
+    except ImportError:
+        _qa_run_prompt = None
 
     cfg = _load_config()
-    llm_cfg = cfg.get("llm") or {}
-    api_key = llm_cfg.get("api_key") or os.getenv("ANTHROPIC_API_KEY", "")
-    base_url = llm_cfg.get("base_url") or None
-    model = llm_cfg.get("model", "MiniMax-M2.5-highspeed")
 
     row = _get_row(row_id)
     job_name = row.get(f"field_{F_JOB_NAME}") or f"row:{row_id}"
@@ -257,17 +256,9 @@ def run_qa_with_kimi(row_id: int, platform: str = "meta") -> dict:
     )
 
     try:
-        client_kwargs = {"api_key": api_key}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        client = _ant.Anthropic(**client_kwargs)
-        resp = client.messages.create(
-            model=model,
-            max_tokens=1000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        result_text = next((b.text for b in resp.content if hasattr(b, "text")), "{}")
+        if _qa_run_prompt is None:
+            raise RuntimeError("agent_runner not available")
+        result_text = _qa_run_prompt(system_prompt, user_prompt, max_tokens=1000, config=cfg)
 
         # Extract JSON from response (handle markdown code blocks)
         import re

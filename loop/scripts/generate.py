@@ -9,11 +9,12 @@ Output: A structured challenger brief saved to learnings/runs/{ts}_challenger.md
 """
 
 import yaml
-import anthropic
 import random
 import datetime
 from pathlib import Path
 from datetime import datetime as _datetime
+
+from agent_runner import run_prompt as _agent_run_prompt
 
 ROOT = Path(__file__).parent.parent
 CONFIG_PATH = ROOT / "config" / "config.yaml"
@@ -194,14 +195,12 @@ def generate_challenger(winner: dict | None, dry_run: bool = False, fatigue_cont
         challenger = _mock_challenger()
     else:
         print("[GENERATE] Calling LLM for challenger copy...")
-        client = anthropic.Anthropic(api_key=config["llm"]["api_key"])
-        message = client.messages.create(
-            model=config["llm"]["model"],
+        challenger = _agent_run_prompt(
+            prompts["generate"],
+            user_prompt,
             max_tokens=2048,
-            system=prompts["generate"],
-            messages=[{"role": "user", "content": user_prompt}],
+            config=config,
         )
-        challenger = message.content[0].text
 
     print(f"\n{'='*60}\nCHALLENGER GENERATED:\n{'='*60}\n{challenger}\n{'='*60}\n")
 

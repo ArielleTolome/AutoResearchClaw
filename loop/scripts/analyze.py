@@ -11,9 +11,10 @@ Logic:
 
 import json
 import yaml
-import anthropic
 from pathlib import Path
 from datetime import datetime
+
+from agent_runner import run_prompt as _agent_run_prompt
 
 ROOT = Path(__file__).parent.parent
 CONFIG_PATH = ROOT / "config" / "config.yaml"
@@ -84,29 +85,20 @@ def format_ads_for_prompt(ads: list[dict]) -> str:
 
 
 def call_llm_analysis(ads: list[dict], winner: dict, kill_list: list[str], config: dict, prompts: dict) -> str:
-    """Ask Claude to write qualitative learnings."""
-    client = anthropic.Anthropic(api_key=config["llm"]["api_key"])
-
+    """Ask the configured LLM/agent to write qualitative learnings."""
     ad_summary = format_ads_for_prompt(ads)
     kill_names = [a["ad_name"] for a in ads if a["ad_id"] in kill_list]
     winner_name = winner["ad_name"] if winner else "none"
 
-    message = client.messages.create(
-        model=config["llm"]["model"],
-        max_tokens=1024,
-        system=prompts["analyze"],
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Offer: {config['offer']['name']} | Target CPA: ${config['offer']['target_cpa']}\n\n"
-                f"AD PERFORMANCE:\n{ad_summary}\n\n"
-                f"WINNER (by composite score): {winner_name}\n"
-                f"KILL LIST: {', '.join(kill_names) or 'none'}\n\n"
-                "Write the analysis and learnings."
-            ),
-        }],
+    user_content = (
+        f"Offer: {config['offer']['name']} | Target CPA: ${config['offer']['target_cpa']}\n\n"
+        f"AD PERFORMANCE:\n{ad_summary}\n\n"
+        f"WINNER (by composite score): {winner_name}\n"
+        f"KILL LIST: {', '.join(kill_names) or 'none'}\n\n"
+        "Write the analysis and learnings."
     )
-    return message.content[0].text
+
+    return _agent_run_prompt(prompts["analyze"], user_content, max_tokens=1024, config=config)
 
 
 def append_to_learnings(cycle_num: int, winner: dict, analysis: str):
@@ -247,10 +239,9 @@ def _load_latest_intel() -> dict | None:
 def analyze_intel(intel_data: dict, config: dict) -> str:
     """
     Analyze competitive intel from multi-source harvest.
-    Calls Claude to extract patterns from Foreplay, FB Ads, YouTube, and Anstrex data.
+    Calls the configured LLM/agent to extract patterns from Foreplay, FB Ads, YouTube, and Anstrex data.
     """
     prompts = load_prompts()
-    client = anthropic.Anthropic(api_key=config["llm"]["api_key"])
 
     # Build summary of top performers from each source
     sections = []
@@ -315,13 +306,12 @@ def analyze_intel(intel_data: dict, config: dict) -> str:
     )
 
     print("[ANALYZE] Calling LLM for intel analysis...")
-    message = client.messages.create(
-        model=config["llm"]["model"],
+    analysis = _agent_run_prompt(
+        prompts.get("analyze", "You are an expert ad creative analyst."),
+        user_prompt,
         max_tokens=2048,
-        system=prompts.get("analyze", "You are an expert ad creative analyst."),
-        messages=[{"role": "user", "content": user_prompt}],
+        config=config,
     )
-    analysis = message.content[0].text
 
     # Save to file
     ts = datetime.now().strftime("%Y%m%d")
