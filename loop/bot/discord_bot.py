@@ -1156,6 +1156,257 @@ async def ugc_brief(interaction: discord.Interaction, concept_id: str, offer: st
             await interaction.followup.send(f"❌ UGC brief failed: {str(e)[:200]}")
 
 
+# ── 16. /ad-dissect ──────────────────────────────────────────────────────────
+
+@bot.tree.command(name="ad-dissect", description="Dissect a competitor or reference ad with Gemini video AI")
+@app_commands.describe(
+    url="YouTube URL or local file path",
+    offer="Your offer (for counter-angle suggestions)",
+)
+async def ad_dissect(interaction: discord.Interaction, url: str, offer: str = ""):
+    await interaction.response.send_message(
+        f"🔬 Running Gemini ad dissection on `{url[:80]}`…"
+    )
+    try:
+        script = SCRIPT_DIR / "ad_dissect.py"
+        args = ["--url", url]
+        if offer:
+            args += ["--offer", offer]
+
+        rc, out = await _run_script("ad_dissect.py", args)
+
+        # Parse JSON output
+        data = {}
+        try:
+            data = json.loads(out.strip())
+        except json.JSONDecodeError:
+            start = out.find("{")
+            end = out.rfind("}") + 1
+            if start != -1 and end > start:
+                try:
+                    data = json.loads(out[start:end])
+                except json.JSONDecodeError:
+                    pass
+
+        if "error" in data:
+            embed = discord.Embed(
+                title="🔬 Ad Dissection — Error",
+                description=data.get("error", "Unknown error")[:500],
+                color=0xE74C3C,
+            )
+            await interaction.edit_original_response(content=None, embed=embed)
+            return
+
+        hook = data.get("hook_transcript", "N/A")[:200]
+        hook_type = data.get("hook_type", "N/A")
+        stage = data.get("awareness_stage", "N/A")
+        angle = data.get("angle", "N/A")
+        hook_rate = data.get("predicted_hook_rate", "N/A")
+        score = data.get("overall_score", 0)
+        strengths = data.get("strengths", [])
+        weaknesses = data.get("weaknesses", [])
+        counter_angles = data.get("counter_angle_opportunities", [])
+        reasoning = data.get("score_reasoning", "")
+
+        embed = discord.Embed(
+            title="🔬 Ad Dissection",
+            description=f"Source: {url[:200]}",
+            color=0x9B59B6,
+        )
+        embed.add_field(name="🎯 Hook", value=f'"{hook}" [{hook_type}]', inline=False)
+        embed.add_field(name="📊 Awareness Stage", value=stage, inline=True)
+        embed.add_field(name="🔀 Angle", value=angle, inline=True)
+        embed.add_field(name="📈 Predicted Hook Rate", value=hook_rate, inline=True)
+        embed.add_field(name="🏆 Score", value=f"{score}/100", inline=True)
+
+        if strengths:
+            embed.add_field(name="✅ Strengths", value="\n".join(f"• {s}" for s in strengths[:5])[:1024], inline=False)
+        if weaknesses:
+            embed.add_field(name="⚠️ Weaknesses", value="\n".join(f"• {w}" for w in weaknesses[:3])[:1024], inline=False)
+        if counter_angles:
+            embed.add_field(name="💡 Counter-Angles", value="\n".join(f"• {c}" for c in counter_angles[:3])[:1024], inline=False)
+        if reasoning:
+            embed.add_field(name="💭 Reasoning", value=reasoning[:512], inline=False)
+        if offer:
+            embed.add_field(name="🎁 Offer", value=offer, inline=True)
+
+        embed.set_footer(text="AutoResearchClaw v2.5 · Gemini Video Intelligence · ACA Methodology")
+
+        await interaction.edit_original_response(content=None, embed=embed)
+
+    except Exception as e:
+        log.error(f"/ad-dissect error: {e}")
+        try:
+            await interaction.edit_original_response(content=f"❌ Ad dissection error: {str(e)[:300]}")
+        except Exception:
+            await interaction.followup.send(f"❌ Ad dissection error: {str(e)[:300]}")
+
+
+# ── 17. /video-qa ─────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="video-qa", description="Run Gemini QA on a video creative before launch")
+@app_commands.describe(
+    url="YouTube URL or local file path",
+    platform="Target platform",
+    job_name="Job name to update in sprint queue (optional)",
+)
+@app_commands.choices(platform=[
+    app_commands.Choice(name="Meta", value="meta"),
+    app_commands.Choice(name="TikTok", value="tiktok"),
+    app_commands.Choice(name="YouTube", value="youtube"),
+])
+async def video_qa_cmd(interaction: discord.Interaction, url: str,
+                       platform: app_commands.Choice[str] = None,
+                       job_name: str = ""):
+    platform_val = platform.value if platform else "meta"
+    await interaction.response.send_message(
+        f"🎬 Running Gemini QA on `{url[:80]}` [{platform_val}]…"
+    )
+    try:
+        args = ["--url", url, "--platform", platform_val]
+        if job_name:
+            args += ["--job-name", job_name, "--update-baserow"]
+
+        rc, out = await _run_script("video_qa.py", args)
+
+        data = {}
+        try:
+            data = json.loads(out.strip())
+        except json.JSONDecodeError:
+            start = out.find("{")
+            end = out.rfind("}") + 1
+            if start != -1 and end > start:
+                try:
+                    data = json.loads(out[start:end])
+                except json.JSONDecodeError:
+                    pass
+
+        passed = data.get("overall_pass", False)
+        qa_score = data.get("qa_score", 0)
+        recommendation = data.get("recommendation", "")
+        issues = data.get("issues", [])
+        duration = data.get("duration_seconds", "?")
+        detected_ratio = data.get("detected_ratio", "?")
+        color = 0x27AE60 if passed else 0xE74C3C
+        result_str = "✅ PASS" if passed else "❌ FAIL"
+
+        title = f"🎬 Video QA {result_str}"
+        if job_name:
+            title += f": {job_name}"
+
+        embed = discord.Embed(title=title, description=url[:200], color=color)
+        embed.add_field(name="Platform", value=platform_val.title(), inline=True)
+        embed.add_field(name="QA Score", value=f"{qa_score}/100", inline=True)
+        embed.add_field(name="Duration", value=f"{duration}s", inline=True)
+        embed.add_field(name="Ratio", value=detected_ratio, inline=True)
+
+        if recommendation:
+            embed.add_field(name="💬 Recommendation", value=recommendation[:500], inline=False)
+
+        if issues:
+            issues_text = "\n".join(
+                f"[{i.get('timestamp','?')}] **{i.get('severity','?').upper()}**: {i.get('description','')}"
+                for i in issues[:8]
+            )
+            embed.add_field(name="⚠️ Issues Found", value=issues_text[:1024], inline=False)
+
+        if job_name:
+            status_set = "Ready to Launch" if passed else "Notes Given"
+            embed.add_field(name="Status Updated", value=status_set, inline=False)
+
+        embed.set_footer(text="AutoResearchClaw v2.5 · Gemini Video Intelligence")
+        await interaction.edit_original_response(content=None, embed=embed)
+
+    except Exception as e:
+        log.error(f"/video-qa error: {e}")
+        try:
+            await interaction.edit_original_response(content=f"❌ Video QA error: {str(e)[:300]}")
+        except Exception:
+            await interaction.followup.send(f"❌ Video QA error: {str(e)[:300]}")
+
+
+# ── 18. /competitor-spy ───────────────────────────────────────────────────────
+
+@bot.tree.command(name="competitor-spy", description="Spy on competitor video ads with Gemini analysis")
+@app_commands.describe(
+    keyword="Search keyword (e.g. stimulus check)",
+    source="Data source",
+    limit="Max ads to analyze (1-5)",
+)
+@app_commands.choices(
+    source=[
+        app_commands.Choice(name="Foreplay", value="foreplay"),
+        app_commands.Choice(name="Facebook Ads Library", value="fb"),
+    ],
+    limit=[
+        app_commands.Choice(name="1 ad", value=1),
+        app_commands.Choice(name="2 ads", value=2),
+        app_commands.Choice(name="3 ads", value=3),
+        app_commands.Choice(name="5 ads", value=5),
+    ],
+)
+async def competitor_spy(
+    interaction: discord.Interaction,
+    keyword: str,
+    source: app_commands.Choice[str] = None,
+    limit: app_commands.Choice[int] = None,
+):
+    source_val = source.value if source else "foreplay"
+    limit_val = str(limit.value) if limit else "3"
+    await interaction.response.send_message(
+        f"🕵️ Running competitor spy for **{keyword}** [{source_val}, {limit_val} ads]…"
+    )
+    try:
+        args = ["--keyword", keyword, "--source", source_val,
+                "--limit", limit_val, "--post-discord"]
+
+        rc, out = await _run_script("competitor_video_spy.py", args)
+
+        # Parse output
+        data = {}
+        try:
+            data = json.loads(out.strip())
+        except json.JSONDecodeError:
+            start = out.find("{")
+            end = out.rfind("}") + 1
+            if start != -1 and end > start:
+                try:
+                    data = json.loads(out[start:end])
+                except json.JSONDecodeError:
+                    pass
+
+        ads_analyzed = data.get("ads_analyzed", 0)
+        dissections = data.get("dissections", [])
+
+        # Build summary embed
+        angles = [d.get("angle", "") for d in dissections if "error" not in d and d.get("angle")]
+        hook_types = [d.get("hook_type", "") for d in dissections if "error" not in d and d.get("hook_type")]
+
+        from collections import Counter
+        angle_summary = ", ".join(f"{k} ({v})" for k, v in Counter(angles).most_common(3)) or "N/A"
+        hook_summary = ", ".join(f"{k} ({v})" for k, v in Counter(hook_types).most_common(3)) or "N/A"
+
+        embed = discord.Embed(
+            title=f"🕵️ Competitor Spy Complete: \"{keyword}\"",
+            description=f"Analyzed **{ads_analyzed}** ads via {source_val}",
+            color=0xE74C3C,
+        )
+        embed.add_field(name="🔀 Top Angles", value=angle_summary, inline=False)
+        embed.add_field(name="🎯 Top Hook Types", value=hook_summary, inline=False)
+        embed.add_field(name="📊 Source", value=source_val.title(), inline=True)
+        embed.add_field(name="🔢 Ads Analyzed", value=str(ads_analyzed), inline=True)
+        embed.set_footer(text="AutoResearchClaw v2.5 · Gemini Video Intelligence · Full landscape posted above ↑")
+
+        await interaction.edit_original_response(content=None, embed=embed)
+
+    except Exception as e:
+        log.error(f"/competitor-spy error: {e}")
+        try:
+            await interaction.edit_original_response(content=f"❌ Competitor spy error: {str(e)[:300]}")
+        except Exception:
+            await interaction.followup.send(f"❌ Competitor spy error: {str(e)[:300]}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
