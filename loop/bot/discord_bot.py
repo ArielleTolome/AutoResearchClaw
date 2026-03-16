@@ -10,7 +10,7 @@ Usage:
   bash loop/bot/run_bot.sh       # Start via wrapper script
 """
 
-import os, sys, json, asyncio, datetime, logging, re
+import os, sys, json, asyncio, datetime, logging, re, argparse
 from pathlib import Path
 
 import yaml
@@ -849,6 +849,91 @@ async def concept_status(interaction: discord.Interaction):
     embed.set_footer(text=f"Total: {total} concepts ({len(dead)} dead) · 80% iteration / 20% new")
 
     await interaction.followup.send(embed=embed)
+
+
+# ── 11. /tracker ─────────────────────────────────────────────────────────────
+
+TRACKER_STATUS_CHOICES = [
+    app_commands.Choice(name="All", value="all"),
+    app_commands.Choice(name="Live", value="live"),
+    app_commands.Choice(name="Waiting", value="waiting"),
+    app_commands.Choice(name="Winners", value="winner"),
+    app_commands.Choice(name="Dead", value="dead"),
+]
+
+@bot.tree.command(name="tracker", description="View and manage the ACA creative testing tracker")
+@app_commands.describe(
+    view="Which rows to show",
+    offer="Filter by offer name",
+    digest="Post today's tracker digest to the channel",
+)
+@app_commands.choices(view=TRACKER_STATUS_CHOICES)
+async def tracker(interaction: discord.Interaction, view: str = "all", offer: str = "", digest: bool = False):
+    await interaction.response.defer()
+
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        import creative_tracker as ct
+
+        if digest:
+            ct.cmd_digest(argparse.Namespace())
+            await interaction.followup.send("✅ Tracker digest posted to Discord.")
+            return
+
+        status_filter = None if view == "all" else view
+        rows = ct._get_rows(status_filter=status_filter, offer_filter=offer or None)
+
+        if not rows:
+            await interaction.followup.send(f"📭 No rows found (filter: {view}, offer: {offer or 'any'}).")
+            return
+
+        # Group by status
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for row in rows:
+            s = (row.get("field_8016") or {}).get("value", "Waiting")
+            groups[s].append(row)
+
+        STATUS_EMOJI = {"Live": "🟢", "Waiting": "⏳", "Winner": "🏆", "Dead": "🔴", "Paused": "⏸️"}
+
+        embed = discord.Embed(
+            title=f"📊 Creative Tracker{' — ' + offer if offer else ''}",
+            color=0x3498DB,
+        )
+
+        for status in ["Winner", "Live", "Waiting", "Paused", "Dead"]:
+            group = groups.get(status, [])
+            if not group:
+                continue
+            emoji = STATUS_EMOJI.get(status, "•")
+            lines = []
+            for row in group[:8]:
+                cid = row.get("field_8013") or "—"
+                hook = (row.get("field_8018") or "—")[:40]
+                hr = row.get("field_8032")
+                ctr = row.get("field_8031")
+                roas = row.get("field_8028")
+                cpa = row.get("field_8029")
+                m = []
+                if hr: m.append(f"HR:{float(hr):.0%}")
+                if ctr: m.append(f"CTR:{float(ctr):.1%}")
+                if roas: m.append(f"ROAS:{float(roas):.1f}x")
+                if cpa: m.append(f"CPA:${float(cpa):.2f}")
+                metric_str = " | ".join(m)
+                lines.append(f"`{cid}` {hook}" + (f"\n  ↳ {metric_str}" if metric_str else ""))
+
+            embed.add_field(
+                name=f"{emoji} {status} ({len(group)})",
+                value="\n".join(lines)[:1024],
+                inline=False,
+            )
+
+        embed.set_footer(text=f"AutoResearchClaw v2.3 · creative_testing_tracker (Baserow 819) · {len(rows)} rows shown")
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        log.error(f"/tracker error: {e}")
+        await interaction.followup.send(f"❌ Tracker error: {str(e)[:300]}")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
