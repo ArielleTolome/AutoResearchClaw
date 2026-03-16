@@ -1,5 +1,29 @@
 # AutoResearchClaw Changelog
 
+## [2.2.0] — 2026-03-15
+
+### 🚀 Discord Bot — 8 New Slash Commands
+
+#### New commands in `loop/bot/discord_bot.py`
+- `/research [topic] [platform]` — Run full research pipeline (Reddit + News + Competitors), synthesize with Kimi into structured intel report with pain points, angles, and hook opportunities
+- `/full-brief [topic] [platform]` — Generate a complete ACA creative brief: awareness stage, persona, 3 angles, 15 hooks, ad concept timeline, platform notes
+- `/gen-hooks [topic] [awareness_stage]` — Generate 20 hooks across all 17 ACA hook types (Question, Shocking Stat, Contrarian, Story, etc.) with scores
+- `/spy [keyword] [days_running]` — Search Anstrex for native ads + competitor_watcher analysis, identify dominant angles and counter-angle opportunities
+- `/daily-intel` — Run the full daily intel pipeline on demand (news → reddit → competitors → digest → signal cards) with parsed result counts
+- `/loop-status` — Show creative loop status: offer config, learnings word count, baseline preview (instant, no defer)
+- `/score [copy]` — Score ad copy against ACA QA checklist on 7 dimensions (70-point scale), color-coded verdict (LAUNCH/REVISE/KILL)
+- `/intel-digest` — Run intel_digest.py and post results as Discord embed
+
+#### New helpers
+- `_run_script()` — async subprocess wrapper for running pipeline scripts
+- `_kimi()` — async wrapper for Kimi M2.5 LLM calls via Anthropic-compatible API
+- `_post_embed()` — chunked embed poster with v2.2 footer
+
+#### Dependencies
+- Added `aiohttp` for direct Anstrex API calls in `/spy`
+
+---
+
 ## [2.1.0] — 2026-03-15
 
 ### 🤖 Discord Bot — One-Click Briefs
