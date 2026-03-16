@@ -205,7 +205,12 @@ def main():
 
     # Determine output path
     if args.output:
-        out_path = Path(args.output)
+        _op = Path(args.output)
+        # If a directory was passed, auto-generate dated filename inside it
+        if _op.is_dir() or str(args.output).endswith("/"):
+            out_path = _op / f"signal_cards_{date_str}.json"
+        else:
+            out_path = _op
     else:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         date_str = datetime.date.today().strftime("%Y%m%d")
