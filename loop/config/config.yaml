@@ -90,3 +90,8 @@ iteration_ratio: 0.8   # 80% iterate proven concepts, 20% fresh
 concept_vault:
   enabled: true
   local_path: "loop/learnings/concept_vault.json"
+
+# ── Creative Testing Tracker (Baserow table 819) ──────────────────────────────
+creative_tracker:
+  table_id: 819
+  baserow_url: "https://baserow.pfsend.com"
