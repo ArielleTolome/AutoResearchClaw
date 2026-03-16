@@ -11,9 +11,14 @@ meta:
 
 # ── LLM (Challenger Generator) ───────────────────────────────────────────────
 llm:
-  provider: "anthropic"
-  model: "claude-sonnet-4-6"
-  api_key: ""  # Uses system ANTHROPIC_API_KEY
+  provider: "anthropic"                        # Anthropic-compatible API
+  model: "MiniMax-M2.5-highspeed"             # Kimi — fast + cheap (~10x vs Sonnet)
+  base_url: "https://api.minimax.io/anthropic" # MiniMax Anthropic-compat endpoint
+  api_key: ""                                  # Uses MINIMAX_API_KEY or ANTHROPIC_API_KEY env var
+  # ── Fallback options ────────────────────────────────────────────────────────
+  # model: "claude-sonnet-4-6"               # Anthropic Claude Sonnet (higher quality)
+  # base_url: ~                              # unset = default Anthropic endpoint
+  # model: "glm-4-plus"                      # GLM-5 via https://open.bigmodel.cn/api/paas/v4/
 
 # ── Loop Settings ────────────────────────────────────────────────────────────
 loop:

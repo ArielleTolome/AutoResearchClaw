@@ -2,7 +2,8 @@
 """
 action_handler.py — Intel-to-Brief in One Click (AutoResearchClaw v2.0)
 Takes a signal ID and an action, fetches the signal from Baserow, calls
-Claude claude-sonnet-4-6 with an action-specific prompt, and posts the result to Discord.
+any Anthropic-compatible LLM (default: MiniMax Kimi M2.5-highspeed) with an action-specific
+prompt, and posts the result to Discord. Model + base_url are read from config.yaml llm block.
 
 Usage:
   python action_handler.py --signal-id abc123 --action generate_brief
@@ -35,8 +36,14 @@ def _load_config() -> dict:
 CFG = _load_config()
 BASEROW_KEY = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_TOKEN", ""))
 BASEROW_BASE_URL = CFG.get("baserow", {}).get("url", "https://baserow.pfsend.com")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or CFG.get("llm", {}).get("api_key", "")
-LLM_MODEL = CFG.get("llm", {}).get("model", "claude-sonnet-4-6")
+ANTHROPIC_API_KEY = (
+    CFG.get("llm", {}).get("api_key")
+    or os.getenv("MINIMAX_API_KEY")       # Kimi / MiniMax
+    or os.getenv("ANTHROPIC_API_KEY")     # Anthropic Claude fallback
+    or ""
+)
+LLM_MODEL      = CFG.get("llm", {}).get("model", "MiniMax-M2.5-highspeed")
+LLM_BASE_URL   = CFG.get("llm", {}).get("base_url", None)  # e.g. https://api.minimax.io/anthropic
 WEBHOOK_URL = CFG.get("discord", {}).get("webhook_url") or os.getenv("DISCORD_WEBHOOK_URL", "")
 
 VALID_ACTIONS = [
@@ -191,7 +198,10 @@ def run_action(action: str, signal: dict) -> str:
     signal_text = _format_signal_for_prompt(signal)
     user_msg = f"Here is the audience signal:\n\n{signal_text}\n\nExecute the action now."
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client_kwargs = {"api_key": ANTHROPIC_API_KEY}
+    if LLM_BASE_URL:
+        client_kwargs["base_url"] = LLM_BASE_URL
+    client = anthropic.Anthropic(**client_kwargs)
     response = client.messages.create(
         model=LLM_MODEL,
         max_tokens=2000,

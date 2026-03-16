@@ -1,5 +1,18 @@
 # AutoResearchClaw Changelog
 
+## [2.0.1] — 2026-03-15
+
+### LLM Provider — Multi-Model Support
+
+- `action_handler.py` now reads `llm.base_url` from config — point at any Anthropic-compatible endpoint
+- Default model switched to **MiniMax Kimi M2.5-highspeed** (`https://api.minimax.io/anthropic`) — ~10x cheaper than Sonnet, same API shape
+- API key resolution order: `config.yaml llm.api_key` → `MINIMAX_API_KEY` env → `ANTHROPIC_API_KEY` env
+- `config.yaml` updated with commented fallback options for Claude Sonnet and GLM-4-plus
+- `daily-intel.yml` both config blocks updated to Kimi + `MINIMAX_API_KEY` secret
+- Swap back to Claude anytime: change `model` + remove `base_url` in config
+
+---
+
 ## [2.0.0] — 2026-03-15
 
 ### 🎯 Intel-to-Brief in One Click
