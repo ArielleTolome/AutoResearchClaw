@@ -32,9 +32,18 @@ def _load_config() -> dict:
 CFG = _load_config()
 BASEROW_KEY = CFG.get("baserow", {}).get("api_key", os.getenv("BASEROW_TOKEN", "Yg1DSyEipxerKG9cuVJg6p6OjN0RTN4R"))
 BASEROW_BASE_URL = CFG.get("baserow", {}).get("url", "https://baserow.pfsend.com")
+WEBHOOK_URL = CFG.get("discord", {}).get("webhook_url") or os.getenv("DISCORD_WEBHOOK_URL", "")
 
 NEWS_TABLE = 767
 REDDIT_TABLE = 818
+
+EMOTION_COLOR = {
+    "Frustrated": 0xE74C3C, "Angry": 0xE74C3C,
+    "Hopeful": 0x2ECC71, "Relieved": 0x2ECC71,
+    "Confused": 0xF39C12, "Anxious": 0xE67E22,
+    "Neutral": 0x95A5A6,
+}
+SOURCE_EMOJI = {"News": "📰", "Reddit": "💬"}
 
 
 # ── Baserow fetch ────────────────────────────────────────────────────────────
@@ -137,10 +146,53 @@ def generate_cards() -> list[dict]:
     return cards
 
 
+def _post_cards_to_discord(cards: list[dict], webhook_url: str | None = None):
+    """Post signal cards as Discord embeds (max 10)."""
+    url = webhook_url or WEBHOOK_URL
+    if not url:
+        print("[cards] No discord.webhook_url configured — skipping post")
+        return
+
+    posted = 0
+    for card in cards[:10]:
+        emoji = SOURCE_EMOJI.get(card.get("source"), "📡")
+        vertical = card.get("vertical", "Unknown")
+        source = card.get("source", "")
+        headline = card.get("headline", "")[:200]
+        summary = card.get("summary", "")[:200]
+        source_url = card.get("source_url", "")
+        emotion = card.get("emotion", "Neutral")
+        color = EMOTION_COLOR.get(emotion, 0x95A5A6)
+
+        desc_parts = [headline]
+        if summary:
+            desc_parts.append(f"\n{summary}")
+        if source_url:
+            desc_parts.append(f"\n[Source]({source_url})")
+
+        embed = {
+            "title": f"{emoji} {vertical} · {source}",
+            "description": "\n".join(desc_parts),
+            "color": color,
+            "footer": {"text": "Click to run: Brief · Persona · Hooks · Script · Image Ad | AutoResearchClaw"},
+        }
+        try:
+            r = requests.post(url, json={"embeds": [embed]}, timeout=15)
+            if r.status_code in (200, 204):
+                posted += 1
+            else:
+                print(f"[cards] Discord error {r.status_code}: {r.text[:100]}")
+        except Exception as e:
+            print(f"[cards] Discord post failed: {e}")
+
+    print(f"[cards] Posted {posted}/{min(len(cards), 10)} cards to Discord")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Signal card button payload generator")
     parser.add_argument("--output", help="Custom output file path")
     parser.add_argument("--dry-run", action="store_true", help="Print cards, don't save")
+    parser.add_argument("--post", action="store_true", help="Post signal cards to Discord as embeds")
     args = parser.parse_args()
 
     cards = generate_cards()
@@ -162,6 +214,10 @@ def main():
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(cards, indent=2))
     print(f"[cards] Saved to {out_path}")
+
+    if args.post:
+        _post_cards_to_discord(cards)
+
     print(f"✅ Done — {len(cards)} signal cards written")
 
 
