@@ -141,7 +141,9 @@ async def on_ready():
     # Register persistent view so buttons work after restart
     bot.add_view(PersistentActionView())
     try:
-        synced = await bot.tree.sync()
+        GUILD = discord.Object(id=1482209550688981014)
+        bot.tree.copy_global_to(guild=GUILD)
+        synced = await bot.tree.sync(guild=GUILD)
         log.info(f"Synced {len(synced)} slash command(s)")
     except Exception as e:
         log.error(f"Failed to sync commands: {e}")
