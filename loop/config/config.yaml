@@ -61,6 +61,17 @@ discord:
 approval_gate:
   enabled: false                   # Set true to require ✅ reaction before deploy
 
+# ── Notion Output Sink ────────────────────────────────────────────────────────
+notion:
+  api_key: ""  # Set via NOTION_API_KEY env var or fill in here (not committed)
+  default_platform: "Meta"   # Used when platform not specified per-action
+  # Database IDs (auto-created — do not change unless you recreate the databases)
+  db_briefs:   "325bbf40-5fd2-81f7-be82-d15e47deef30"
+  db_hooks:    "325bbf40-5fd2-8100-92f1-f92c1b822664"
+  db_intel:    "325bbf40-5fd2-818f-9eeb-d2e2b11fa62d"
+  db_personas: "325bbf40-5fd2-81e2-bb09-c6354d4433bb"
+  hub_url: "https://www.notion.so/AutoResearchClaw-325bbf405fd2810d99c1ede1b26541a4"
+
 # ── Qdrant Memory ─────────────────────────────────────────────────────────────
 qdrant:
   enabled: true

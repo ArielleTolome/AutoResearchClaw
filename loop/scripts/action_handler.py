@@ -24,6 +24,13 @@ try:
 except ImportError:
     HAS_ANTHROPIC = False
 
+try:
+    from notion_sink import write_action_output as notion_write, HUB_URL as NOTION_HUB_URL
+    HAS_NOTION = True
+except ImportError:
+    HAS_NOTION = False
+    NOTION_HUB_URL = ""
+
 # ── Config ───────────────────────────────────────────────────────────────────
 CFG_PATH = Path(__file__).parent.parent / "config" / "config.yaml"
 PROMPTS_PATH = Path(__file__).parent.parent / "config" / "prompts.ads.yaml"
@@ -313,6 +320,17 @@ def main():
         signal_headline=headline,
         webhook_url=webhook,
     )
+
+    # Write to Notion
+    if HAS_NOTION and CFG.get("notion", {}).get("api_key"):
+        platform = CFG.get("notion", {}).get("default_platform", "Meta")
+        notion_url = notion_write(args.action, signal, result, platform)
+        if notion_url:
+            print(f"[action] 📓 Notion page: {notion_url}")
+        else:
+            print("[action] ⚠️  Notion write failed (check api_key in config)")
+    else:
+        print("[action] ℹ️  Notion not configured — set notion.api_key in config.yaml to enable")
 
     print(f"✅ {ACTION_LABEL[args.action]} complete for signal {args.signal_id}")
 
