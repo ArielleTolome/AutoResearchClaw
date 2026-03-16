@@ -588,86 +588,99 @@ async def gen_hooks(interaction: discord.Interaction, topic: str, awareness_stag
 @bot.tree.command(name="spy", description="Search Anstrex for native ads on keyword")
 @app_commands.describe(keyword="Keyword to spy on", days_running="Minimum days running")
 async def spy(interaction: discord.Interaction, keyword: str, days_running: int = 30):
-    await interaction.response.defer()
-
-    _, comp_out = await _run_script("competitor_watcher.py", ["--vertical", keyword])
-
-    # Fetch Anstrex API directly
-    anstrex_text = ""
+    await interaction.response.send_message(f"🕵️ Spying on **{keyword}** (min {days_running} days running)…")
     try:
-        url = "https://api.anstrex.com/api/v1/en/creative/search"
-        headers = {
-            "Authorization": "Bearer 631281|opCWb4Y22xWM1AidmVUjyLVAFe0y08F0uesjEQqy71c6a5b3",
-            "Origin": "https://native.anstrex.com",
-            "Referer": "https://native.anstrex.com/",
-        }
-        params = {
-            "product_name": "native",
-            "product_type": "creative",
-            "keyword": keyword,
-            "sort_id": 10,
-            "page": 1,
-            "additional_data": "eyJpcCI6bnVsbH0=",
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    ads = data.get("data", {}).get("data", [])[:5]
-                    lines = []
-                    for ad in ads:
-                        src = ad.get("_source", {})
-                        lines.append(
-                            f"• **{src.get('title', 'N/A')}**\n"
-                            f"  {src.get('sub_text', '')[:100]}\n"
-                            f"  Networks: {', '.join(src.get('ad_network_names', []))}\n"
-                            f"  Created: {src.get('created_at', 'N/A')}"
-                        )
-                    anstrex_text = "\n".join(lines) if lines else "No Anstrex results."
-                else:
-                    anstrex_text = f"Anstrex API returned {resp.status}"
+        _, comp_out = await _run_script("competitor_watcher.py", ["--vertical", keyword])
+
+        # Fetch Anstrex API directly
+        anstrex_text = ""
+        try:
+            url = "https://api.anstrex.com/api/v1/en/creative/search"
+            headers = {
+                "Authorization": "Bearer 631281|opCWb4Y22xWM1AidmVUjyLVAFe0y08F0uesjEQqy71c6a5b3",
+                "Origin": "https://native.anstrex.com",
+                "Referer": "https://native.anstrex.com/",
+            }
+            params = {
+                "product_name": "native",
+                "product_type": "creative",
+                "keyword": keyword,
+                "sort_id": 10,
+                "page": 1,
+                "additional_data": "eyJpcCI6bnVsbH0=",
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        ads = data.get("data", {}).get("data", [])[:5]
+                        lines = []
+                        for ad in ads:
+                            src = ad.get("_source", {})
+                            lines.append(
+                                f"• **{src.get('title', 'N/A')}**\n"
+                                f"  {src.get('sub_text', '')[:100]}\n"
+                                f"  Networks: {', '.join(src.get('ad_network_names', []))}\n"
+                                f"  Created: {src.get('created_at', 'N/A')}"
+                            )
+                        anstrex_text = "\n".join(lines) if lines else "No Anstrex results."
+                    else:
+                        anstrex_text = f"Anstrex API returned {resp.status}"
+        except Exception as e:
+            anstrex_text = f"Anstrex fetch error: {e}"
+
+        analysis = await _kimi(
+            system="You are a competitive ad intelligence analyst. Analyze angle and hook patterns, then suggest counter-angles.",
+            user=(
+                f"Keyword: {keyword}\nMin days running: {days_running}\n\n"
+                f"Competitor watcher output:\n{comp_out[-1000:]}\n\n"
+                f"Anstrex top ads:\n{anstrex_text}\n\n"
+                "Analyze:\n1. Dominant angles and hook patterns\n2. What's overused\n3. Counter-angle opportunities"
+            ),
+        )
+
+        embed = discord.Embed(title=f"🕵️ Spy: {keyword}", description=analysis[:4000], color=0xE74C3C)
+        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        await interaction.edit_original_response(content=None, embed=embed)
     except Exception as e:
-        anstrex_text = f"Anstrex fetch error: {e}"
-
-    analysis = await _kimi(
-        system="You are a competitive ad intelligence analyst. Analyze angle and hook patterns, then suggest counter-angles.",
-        user=(
-            f"Keyword: {keyword}\nMin days running: {days_running}\n\n"
-            f"Competitor watcher output:\n{comp_out[-1000:]}\n\n"
-            f"Anstrex top ads:\n{anstrex_text}\n\n"
-            "Analyze:\n1. Dominant angles and hook patterns\n2. What's overused\n3. Counter-angle opportunities"
-        ),
-    )
-
-    await _post_embed(interaction, f"🕵️ Spy: {keyword}", analysis, 0xE74C3C)
+        log.error(f"/spy error: {e}")
+        await interaction.edit_original_response(content=f"❌ Spy failed: {str(e)[:200]}")
 
 
 # ── 5. /daily-intel ──────────────────────────────────────────────────────────
 
 @bot.tree.command(name="daily-intel", description="Run the full daily intel pipeline right now")
 async def daily_intel(interaction: discord.Interaction):
-    await interaction.response.defer()
+    await interaction.response.send_message("📰 Running daily intel pipeline — this takes ~2 min…")
+    try:
+        results = []
+        scripts = ["news_watcher.py", "reddit_source.py", "competitor_watcher.py", "intel_digest.py", "signal_cards.py"]
+        for i, script in enumerate(scripts, 1):
+            args = ["--output", "loop/output/"] if script == "signal_cards.py" else []
+            rc, out = await _run_script(script, args)
+            results.append((script, rc, out))
+            # Update progress mid-run so the user sees something
+            if i < len(scripts):
+                status_line = " · ".join(
+                    ("✅" if r == 0 else "❌") + f" `{s}`" for s, r, _ in results
+                )
+                await interaction.edit_original_response(content=f"📰 Running… {status_line}")
 
-    results = []
-    for script in ["news_watcher.py", "reddit_source.py", "competitor_watcher.py", "intel_digest.py"]:
-        rc, out = await _run_script(script, [])
-        results.append((script, rc, out))
+        all_output = " ".join(out for _, _, out in results)
+        counts = re.findall(r"(\d+)\s+(new|relevant|ads? found|signal cards?)", all_output, re.IGNORECASE)
+        count_str = "\n".join(f"• {num} {label}" for num, label in counts) if counts else "Pipeline complete."
 
-    # Also run signal cards
-    rc_sc, sc_out = await _run_script("signal_cards.py", ["--output", "loop/output/"])
-    results.append(("signal_cards.py", rc_sc, sc_out))
+        desc = f"**Counts:**\n{count_str}\n\n"
+        for script, rc, out in results:
+            status = "✅" if rc == 0 else "❌"
+            desc += f"{status} `{script}` (exit {rc})\n"
 
-    # Parse counts from outputs
-    all_output = " ".join(out for _, _, out in results)
-    counts = re.findall(r"(\d+)\s+(new|relevant|ads? found|signal cards?)", all_output, re.IGNORECASE)
-    count_str = "\n".join(f"• {num} {label}" for num, label in counts) if counts else "Pipeline complete."
-
-    desc = f"**Counts:**\n{count_str}\n\n**Scripts run:** {len(results)}"
-    for script, rc, out in results:
-        status = "✅" if rc == 0 else "❌"
-        desc += f"\n{status} `{script}` (exit {rc})"
-
-    await _post_embed(interaction, "📰 Daily Intel Complete", desc, 0x9B59B6)
+        embed = discord.Embed(title="📰 Daily Intel Complete", description=desc[:4000], color=0x9B59B6)
+        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        await interaction.edit_original_response(content=None, embed=embed)
+    except Exception as e:
+        log.error(f"/daily-intel error: {e}")
+        await interaction.edit_original_response(content=f"❌ Daily intel failed: {str(e)[:200]}")
 
 
 # ── 6. /loop-status ──────────────────────────────────────────────────────────
@@ -709,47 +722,49 @@ async def loop_status(interaction: discord.Interaction):
 @bot.tree.command(name="score", description="Score ad copy against the ACA QA checklist")
 @app_commands.describe(copy="The ad copy to evaluate")
 async def score(interaction: discord.Interaction, copy: str):
-    await interaction.response.defer()
+    await interaction.response.send_message("📊 Scoring your copy…")
+    try:
+        result = await _kimi(
+            system="You are an ad copy QA specialist. Score ruthlessly.",
+            user=(
+                f"Score this ad copy:\n\n{copy}\n\n"
+                "Score on 7 dimensions (each X/10 with one specific fix):\n"
+                "1. Hook Clarity\n2. Awareness Match\n3. Emotional Driver\n"
+                "4. Pain Agitation\n5. Proof Strength\n6. CTA Clarity\n7. Platform Fit\n\n"
+                "Then:\nTOTAL: X/70\nVERDICT: LAUNCH / REVISE / KILL\nTOP 3 FIXES:\n- fix 1\n- fix 2\n- fix 3"
+            ),
+            max_tokens=1500,
+        )
 
-    result = await _kimi(
-        system="You are an ad copy QA specialist. Score ruthlessly.",
-        user=(
-            f"Score this ad copy:\n\n{copy}\n\n"
-            "Score on 7 dimensions (each X/10 with one specific fix):\n"
-            "1. Hook Clarity\n2. Awareness Match\n3. Emotional Driver\n"
-            "4. Pain Agitation\n5. Proof Strength\n6. CTA Clarity\n7. Platform Fit\n\n"
-            "Then:\nTOTAL: X/70\nVERDICT: LAUNCH / REVISE / KILL\nTOP 3 FIXES:\n- fix 1\n- fix 2\n- fix 3"
-        ),
-        max_tokens=1500,
-    )
+        match = re.search(r"TOTAL:\s*(\d+)/70", result)
+        total = int(match.group(1)) if match else 0
+        color = 0x27AE60 if total >= 50 else (0xF39C12 if total >= 35 else 0xE74C3C)
 
-    # Parse total score to pick color
-    match = re.search(r"TOTAL:\s*(\d+)/70", result)
-    total = int(match.group(1)) if match else 0
-    if total >= 50:
-        color = 0x27AE60
-    elif total >= 35:
-        color = 0xF39C12
-    else:
-        color = 0xE74C3C
-
-    await _post_embed(interaction, "📊 Copy Score", result, color)
+        embed = discord.Embed(title="📊 Copy Score", description=result[:4000], color=color)
+        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        await interaction.edit_original_response(content=None, embed=embed)
+    except Exception as e:
+        log.error(f"/score error: {e}")
+        await interaction.edit_original_response(content=f"❌ Score failed: {str(e)[:200]}")
 
 
 # ── 8. /intel-digest ─────────────────────────────────────────────────────────
 
 @bot.tree.command(name="intel-digest", description="Post the intel digest to Discord right now")
 async def intel_digest(interaction: discord.Interaction):
-    await interaction.response.defer()
-
-    rc, out = await _run_script("intel_digest.py", [])
-
-    if rc != 0:
-        desc = f"**intel_digest.py failed (exit {rc})**\n```\n{out[-500:]}\n```"
-    else:
-        desc = out[-500:] if out.strip() else "Digest generated (no stdout output)."
-
-    await _post_embed(interaction, "📰 Intel Digest", desc, 0x8E44AD)
+    await interaction.response.send_message("📰 Running intel digest…")
+    try:
+        rc, out = await _run_script("intel_digest.py", [])
+        if rc != 0:
+            desc = f"**intel_digest.py failed (exit {rc})**\n```\n{out[-500:]}\n```"
+        else:
+            desc = out[-500:] if out.strip() else "Digest generated (no stdout output)."
+        embed = discord.Embed(title="📰 Intel Digest", description=desc[:4000], color=0x8E44AD)
+        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        await interaction.edit_original_response(content=None, embed=embed)
+    except Exception as e:
+        log.error(f"/intel-digest error: {e}")
+        await interaction.edit_original_response(content=f"❌ Intel digest failed: {str(e)[:200]}")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
