@@ -10,8 +10,10 @@ Output: A structured challenger brief saved to learnings/runs/{ts}_challenger.md
 
 import yaml
 import anthropic
+import random
+import datetime
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime as _datetime
 
 ROOT = Path(__file__).parent.parent
 CONFIG_PATH = ROOT / "config" / "config.yaml"
@@ -137,6 +139,40 @@ def generate_challenger(winner: dict | None, dry_run: bool = False, fatigue_cont
     if fatigue_context:
         fatigue_block = f"--- ANGLE FATIGUE (avoid DEAD, prefer FRESH/WARMING) ---\n{fatigue_context}\n\n"
 
+    # ── 80/20 Iteration Rule ──────────────────────────────────────────────────
+    proven = []
+    try:
+        import sys as _sys
+        import importlib as _importlib
+        _scripts_dir = str(Path(__file__).parent)
+        if _scripts_dir not in _sys.path:
+            _sys.path.insert(0, _scripts_dir)
+        _cv = _importlib.import_module("concept_vault")
+        proven = _cv.get_proven()
+    except Exception:
+        proven = []
+
+    iteration_ratio = config.get("iteration_ratio", 0.8)
+    use_iteration = bool(proven) and random.random() < iteration_ratio
+    iteration_block = ""
+    chosen_concept = None
+
+    if use_iteration:
+        chosen_concept = random.choice(proven)
+        iteration_block = (
+            f"\n\n--- PROVEN CONCEPT TO ITERATE ---\n"
+            f"Concept: {chosen_concept['name']}\n"
+            f"Description: {chosen_concept['description']}\n"
+            f"Best Hook Rate: {chosen_concept.get('hook_rate_best') or 'unknown'}\n"
+            f"Winning Hook Types: {', '.join(chosen_concept.get('winning_hook_types', [])) or 'none yet'}\n\n"
+            "Make ONE meaningful change to this proven concept: try a different hook type, "
+            "different actor persona, or different scene. Keep the core concept intact.\n"
+        )
+        print(f"[GENERATE] 80/20 mode: iterating on proven concept '{chosen_concept['name']}'")
+    else:
+        iteration_block = "\n\n--- MODE: FRESH CONCEPT ---\nCreate a completely new angle not yet in the learnings.\n"
+        print("[GENERATE] 80/20 mode: generating fresh concept (20%)")
+
     user_prompt = (
         f"OFFER: {offer['name']}\n"
         f"NICHE: {offer['niche']}\n"
@@ -147,6 +183,7 @@ def generate_challenger(winner: dict | None, dry_run: bool = False, fatigue_cont
         f"{qdrant_block}"
         f"{fatigue_block}"
         f"--- CREATIVE FRAMEWORKS ---\n{frameworks}\n\n"
+        f"{iteration_block}"
         "Write the next challenger creative. Make ONE meaningful change. "
         "Ground it in the learnings. Don't repeat what's already failed. "
         "Avoid angles marked DEAD in the fatigue data — prioritize FRESH and WARMING angles."
@@ -168,8 +205,25 @@ def generate_challenger(winner: dict | None, dry_run: bool = False, fatigue_cont
 
     print(f"\n{'='*60}\nCHALLENGER GENERATED:\n{'='*60}\n{challenger}\n{'='*60}\n")
 
+    # ── Update concept vault after generation ─────────────────────────────────
+    if use_iteration and chosen_concept:
+        try:
+            import sys as _sys2
+            _scripts_dir2 = str(Path(__file__).parent)
+            if _scripts_dir2 not in _sys2.path:
+                _sys2.path.insert(0, _scripts_dir2)
+            from concept_vault import update_concept as _update_concept
+            _update_concept(
+                chosen_concept["concept_id"],
+                last_iterated=str(datetime.date.today()),
+                batch_count=chosen_concept.get("batch_count", 0) + 1,
+            )
+            print(f"[GENERATE] Updated vault for concept {chosen_concept['concept_id']}")
+        except Exception as _e:
+            print(f"[GENERATE] Could not update concept vault: {_e}")
+
     # Save
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = _datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = RUNS_DIR / f"{ts}_challenger.md"
     out_path.write_text(challenger)
     print(f"[GENERATE] Saved to {out_path}")
