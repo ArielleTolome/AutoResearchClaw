@@ -10,7 +10,7 @@ Usage:
   bash loop/bot/run_bot.sh       # Start via wrapper script
 """
 
-import os, sys, json, asyncio, datetime, logging, re, argparse
+import os, sys, json, asyncio, datetime, logging, re, argparse, hashlib
 from pathlib import Path
 
 import yaml
@@ -132,6 +132,19 @@ def _extract_summary(content: str, max_chars: int = 280) -> str:
     if len(snippet) == max_chars:
         snippet = snippet.rsplit(" ", 1)[0] + "…"
     return snippet or content[:max_chars]
+
+
+async def _download_attachment(attachment: discord.Attachment) -> str:
+    """Download a Discord attachment to /tmp, return local path."""
+    ext = attachment.filename.rsplit(".", 1)[-1].lower() if "." in attachment.filename else "mp4"
+    hash_str = hashlib.md5(attachment.url.encode()).hexdigest()[:8]
+    local_path = f"/tmp/arc_upload_{hash_str}.{ext}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(attachment.url) as resp:
+            if resp.status == 200:
+                with open(local_path, "wb") as f:
+                    f.write(await resp.read())
+    return local_path
 
 
 def _notion_link_view(notion_url: str) -> discord.ui.View:
@@ -1160,16 +1173,31 @@ async def ugc_brief(interaction: discord.Interaction, concept_id: str, offer: st
 
 @bot.tree.command(name="ad-dissect", description="Dissect a competitor or reference ad with Gemini video AI")
 @app_commands.describe(
-    url="YouTube URL or local file path",
+    url="YouTube URL or local file path (optional if uploading file)",
+    file="Upload a video or image file directly",
     offer="Your offer (for counter-angle suggestions)",
 )
-async def ad_dissect(interaction: discord.Interaction, url: str, offer: str = ""):
-    await interaction.response.send_message(
-        f"🔬 Running Gemini ad dissection on `{url[:80]}`…"
-    )
+async def ad_dissect(interaction: discord.Interaction, url: str = None, file: discord.Attachment = None, offer: str = ""):
+    # Resolve source: attachment > url
+    local_temp = None
+    source_arg = None
+    if file is not None:
+        await interaction.response.send_message(f"🔬 Downloading attachment `{file.filename}` and running Gemini ad dissection…")
+        local_temp = await _download_attachment(file)
+        source_arg = local_temp
+    elif url:
+        await interaction.response.send_message(f"🔬 Running Gemini ad dissection on `{url[:80]}`…")
+        source_arg = url
+    else:
+        await interaction.response.send_message(embed=discord.Embed(
+            title="❌ No input provided",
+            description="Please provide a URL or upload a video/image file.",
+            color=0xE74C3C
+        ))
+        return
     try:
         script = SCRIPT_DIR / "ad_dissect.py"
-        args = ["--url", url]
+        args = ["--video", source_arg]
         if offer:
             args += ["--offer", offer]
 
@@ -1240,13 +1268,17 @@ async def ad_dissect(interaction: discord.Interaction, url: str, offer: str = ""
             await interaction.edit_original_response(content=f"❌ Ad dissection error: {str(e)[:300]}")
         except Exception:
             await interaction.followup.send(f"❌ Ad dissection error: {str(e)[:300]}")
+    finally:
+        if local_temp and os.path.exists(local_temp):
+            os.remove(local_temp)
 
 
 # ── 17. /video-qa ─────────────────────────────────────────────────────────────
 
 @bot.tree.command(name="video-qa", description="Run Gemini QA on a video creative before launch")
 @app_commands.describe(
-    url="YouTube URL or local file path",
+    url="YouTube URL or local file path (optional if uploading file)",
+    file="Upload a video or image file directly",
     platform="Target platform",
     job_name="Job name to update in sprint queue (optional)",
 )
@@ -1255,15 +1287,30 @@ async def ad_dissect(interaction: discord.Interaction, url: str, offer: str = ""
     app_commands.Choice(name="TikTok", value="tiktok"),
     app_commands.Choice(name="YouTube", value="youtube"),
 ])
-async def video_qa_cmd(interaction: discord.Interaction, url: str,
+async def video_qa_cmd(interaction: discord.Interaction, url: str = None,
+                       file: discord.Attachment = None,
                        platform: app_commands.Choice[str] = None,
                        job_name: str = ""):
     platform_val = platform.value if platform else "meta"
-    await interaction.response.send_message(
-        f"🎬 Running Gemini QA on `{url[:80]}` [{platform_val}]…"
-    )
+    # Resolve source: attachment > url
+    local_temp = None
+    source_arg = None
+    if file is not None:
+        await interaction.response.send_message(f"🎬 Downloading attachment `{file.filename}` and running Gemini QA [{platform_val}]…")
+        local_temp = await _download_attachment(file)
+        source_arg = local_temp
+    elif url:
+        await interaction.response.send_message(f"🎬 Running Gemini QA on `{url[:80]}` [{platform_val}]…")
+        source_arg = url
+    else:
+        await interaction.response.send_message(embed=discord.Embed(
+            title="❌ No input provided",
+            description="Please provide a URL or upload a video/image file.",
+            color=0xE74C3C
+        ))
+        return
     try:
-        args = ["--url", url, "--platform", platform_val]
+        args = ["--video", source_arg, "--platform", platform_val]
         if job_name:
             args += ["--job-name", job_name, "--update-baserow"]
 
@@ -1323,15 +1370,19 @@ async def video_qa_cmd(interaction: discord.Interaction, url: str,
             await interaction.edit_original_response(content=f"❌ Video QA error: {str(e)[:300]}")
         except Exception:
             await interaction.followup.send(f"❌ Video QA error: {str(e)[:300]}")
+    finally:
+        if local_temp and os.path.exists(local_temp):
+            os.remove(local_temp)
 
 
 # ── 18. /competitor-spy ───────────────────────────────────────────────────────
 
 @bot.tree.command(name="competitor-spy", description="Spy on competitor video ads with Gemini analysis")
 @app_commands.describe(
-    keyword="Search keyword (e.g. stimulus check)",
-    source="Data source",
-    limit="Max ads to analyze (1-5)",
+    keyword="Search keyword (e.g. stimulus check) — optional if uploading a file",
+    file="Upload a competitor video or image ad directly",
+    source="Data source (keyword search only)",
+    limit="Max ads to analyze (1-5) (keyword search only)",
 )
 @app_commands.choices(
     source=[
@@ -1347,18 +1398,33 @@ async def video_qa_cmd(interaction: discord.Interaction, url: str,
 )
 async def competitor_spy(
     interaction: discord.Interaction,
-    keyword: str,
+    keyword: str = None,
+    file: discord.Attachment = None,
     source: app_commands.Choice[str] = None,
     limit: app_commands.Choice[int] = None,
 ):
     source_val = source.value if source else "foreplay"
     limit_val = str(limit.value) if limit else "3"
-    await interaction.response.send_message(
-        f"🕵️ Running competitor spy for **{keyword}** [{source_val}, {limit_val} ads]…"
-    )
+    # Resolve source: attachment > keyword search
+    local_temp = None
+    if file is not None:
+        await interaction.response.send_message(f"🕵️ Downloading attachment `{file.filename}` and running competitor spy analysis…")
+        local_temp = await _download_attachment(file)
+        args_base = ["--video", local_temp, "--post-discord"]
+    elif keyword:
+        await interaction.response.send_message(
+            f"🕵️ Running competitor spy for **{keyword}** [{source_val}, {limit_val} ads]…"
+        )
+        args_base = ["--keyword", keyword, "--source", source_val, "--limit", limit_val, "--post-discord"]
+    else:
+        await interaction.response.send_message(embed=discord.Embed(
+            title="❌ No input provided",
+            description="Please provide a search keyword or upload a video/image file.",
+            color=0xE74C3C
+        ))
+        return
     try:
-        args = ["--keyword", keyword, "--source", source_val,
-                "--limit", limit_val, "--post-discord"]
+        args = args_base
 
         rc, out = await _run_script("competitor_video_spy.py", args)
 
@@ -1386,14 +1452,17 @@ async def competitor_spy(
         angle_summary = ", ".join(f"{k} ({v})" for k, v in Counter(angles).most_common(3)) or "N/A"
         hook_summary = ", ".join(f"{k} ({v})" for k, v in Counter(hook_types).most_common(3)) or "N/A"
 
+        spy_title = f"🕵️ Competitor Spy Complete: \"{keyword}\"" if keyword else f"🕵️ Competitor Spy Complete: {file.filename if file else 'upload'}"
+        spy_desc = f"Analyzed **{ads_analyzed}** ads via {source_val}" if keyword else f"Analyzed uploaded file via Gemini"
         embed = discord.Embed(
-            title=f"🕵️ Competitor Spy Complete: \"{keyword}\"",
-            description=f"Analyzed **{ads_analyzed}** ads via {source_val}",
+            title=spy_title,
+            description=spy_desc,
             color=0xE74C3C,
         )
         embed.add_field(name="🔀 Top Angles", value=angle_summary, inline=False)
         embed.add_field(name="🎯 Top Hook Types", value=hook_summary, inline=False)
-        embed.add_field(name="📊 Source", value=source_val.title(), inline=True)
+        if keyword:
+            embed.add_field(name="📊 Source", value=source_val.title(), inline=True)
         embed.add_field(name="🔢 Ads Analyzed", value=str(ads_analyzed), inline=True)
         embed.set_footer(text="AutoResearchClaw v2.5 · Gemini Video Intelligence · Full landscape posted above ↑")
 
@@ -1405,6 +1474,9 @@ async def competitor_spy(
             await interaction.edit_original_response(content=f"❌ Competitor spy error: {str(e)[:300]}")
         except Exception:
             await interaction.followup.send(f"❌ Competitor spy error: {str(e)[:300]}")
+    finally:
+        if local_temp and os.path.exists(local_temp):
+            os.remove(local_temp)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
