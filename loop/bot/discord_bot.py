@@ -86,27 +86,18 @@ async def _run_script(script_name: str, args: list) -> tuple:
     return proc.returncode, out.decode(errors="replace")
 
 async def _kimi(system: str, user: str, max_tokens: int = 2000) -> str:
-    import anthropic as _ant
-    llm_cfg = CFG.get("llm") or {}
-    api_key = llm_cfg.get("api_key") or os.getenv("ANTHROPIC_API_KEY", "")
-    base_url = llm_cfg.get("base_url") or None
-    model = llm_cfg.get("model", "claude-3-5-haiku-20241022")
-    if not api_key:
-        return "⚠️ No LLM API key configured in config.yaml (llm.api_key)."
-    client_kwargs = {"api_key": api_key}
-    if base_url:
-        client_kwargs["base_url"] = base_url
-    client = _ant.Anthropic(**client_kwargs)
+    """Call the configured LLM/agent (anthropic, openai, codex, or claude-code)."""
+    try:
+        from agent_runner import run_prompt as _ar_run
+    except ImportError:
+        return "⚠️ agent_runner not available — check loop/scripts/agent_runner.py"
+
     loop = asyncio.get_event_loop()
     try:
-        resp = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: client.messages.create(
-                model=model, max_tokens=max_tokens,
-                system=system, messages=[{"role":"user","content":user}]
-            )),
-            timeout=120,  # 2 min hard cap — well within Discord's 15 min followup window
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _ar_run(system, user, max_tokens=max_tokens, config=CFG)),
+            timeout=120,
         )
-        result = next((b.text for b in resp.content if hasattr(b,"text")), "")
         return result if result.strip() else "⚠️ Model returned empty response. Try again."
     except asyncio.TimeoutError:
         return "⚠️ LLM request timed out after 120s. Try a shorter topic."
@@ -1477,6 +1468,49 @@ async def competitor_spy(
     finally:
         if local_temp and os.path.exists(local_temp):
             os.remove(local_temp)
+
+
+# ── 19. /provider ─────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="provider", description="Show current LLM provider and model configuration")
+async def provider_cmd(interaction: discord.Interaction):
+    """Display current provider info from config.yaml."""
+    try:
+        from agent_runner import get_provider_info
+        info = get_provider_info(config=CFG)
+    except ImportError:
+        await interaction.response.send_message(
+            "❌ agent_runner not available — check loop/scripts/agent_runner.py",
+            ephemeral=True,
+        )
+        return
+
+    provider = info["provider"]
+    model = info["model"]
+    base_url = info["base_url"] or "*(default endpoint)*"
+    agent_mode = info["agent_mode"]
+    agent_mode_str = "✅ Agent Mode (CLI subprocess)" if agent_mode else "❌ API call"
+
+    # Map provider names to friendly display names
+    provider_display = {
+        "anthropic": "Anthropic (Claude / Kimi-compat)",
+        "minimax": "MiniMax Kimi (Anthropic-compat)",
+        "openai": "OpenAI",
+        "codex": "Codex CLI 🤖",
+        "claude-code": "Claude Code CLI 🤖",
+    }.get(provider, provider)
+
+    embed = discord.Embed(
+        title="🔧 LLM Provider Config",
+        color=0x5865F2 if not agent_mode else 0x57F287,
+    )
+    embed.add_field(name="Provider", value=provider_display, inline=True)
+    embed.add_field(name="Model", value=f"`{model}`", inline=True)
+    embed.add_field(name="Base URL", value=f"`{base_url}`", inline=False)
+    embed.add_field(name="Agent Mode", value=agent_mode_str, inline=False)
+    embed.set_footer(text="AutoResearchClaw v2.6 · Change provider in loop/config/config.yaml → llm.provider")
+
+    await interaction.response.send_message(embed=embed)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
