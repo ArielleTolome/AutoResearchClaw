@@ -89,13 +89,25 @@ async def _kimi(system: str, user: str, max_tokens: int = 2000) -> str:
     import anthropic as _ant
     client = _ant.Anthropic(api_key=CFG["llm"]["api_key"], base_url=CFG["llm"]["base_url"])
     loop = asyncio.get_event_loop()
-    resp = await loop.run_in_executor(None, lambda: client.messages.create(
-        model=CFG["llm"]["model"], max_tokens=max_tokens,
-        system=system, messages=[{"role":"user","content":user}]
-    ))
-    return next((b.text for b in resp.content if hasattr(b,"text")), "")
+    try:
+        resp = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: client.messages.create(
+                model=CFG["llm"]["model"], max_tokens=max_tokens,
+                system=system, messages=[{"role":"user","content":user}]
+            )),
+            timeout=120,  # 2 min hard cap — well within Discord's 15 min followup window
+        )
+        result = next((b.text for b in resp.content if hasattr(b,"text")), "")
+        return result if result.strip() else "⚠️ Model returned empty response. Try again."
+    except asyncio.TimeoutError:
+        return "⚠️ LLM request timed out after 120s. Try a shorter topic."
+    except Exception as e:
+        log.error(f"_kimi error: {e}")
+        return f"⚠️ LLM error: {str(e)[:200]}"
 
 async def _post_embed(interaction, title, description, color):
+    if not description or not description.strip():
+        description = "*(no output)*"
     chunks = [description[i:i+4000] for i in range(0, len(description), 4000)]
     embed = discord.Embed(title=title, description=chunks[0], color=color)
     embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
@@ -418,54 +430,62 @@ AWARENESS_CHOICES = [
 @app_commands.describe(topic="The topic to research", platform="Target ad platform")
 @app_commands.choices(platform=PLATFORM_CHOICES)
 async def research(interaction: discord.Interaction, topic: str, platform: str = "general"):
-    await interaction.response.defer()
-
-    (rc1, reddit_out), (rc2, news_out), (rc3, competitor_out) = await asyncio.gather(
-        _run_script("reddit_source.py", ["--limit", "10"]),
-        _run_script("news_watcher.py", ["--limit", "5"]),
-        _run_script("competitor_watcher.py", []),
+    # Acknowledge immediately — scripts take time and Discord token expires after 15 min
+    await interaction.response.send_message(
+        f"🔍 Researching **{topic}** ({platform}) — this takes ~60s…"
     )
 
-    synthesis = await _kimi(
-        system="You are an ad creative strategist. Synthesize research into a structured intelligence report.",
-        user=(
-            f"Topic: {topic}\nPlatform: {platform}\n\n"
-            f"Reddit:\n{reddit_out[-1000:]}\n\n"
-            f"News:\n{news_out[-1000:]}\n\n"
-            f"Competitors:\n{competitor_out[-1000:]}\n\n"
-            "Deliver:\n"
-            "1. Top 3 audience pain points with verbatim quotes\n"
-            "2. Top 3 angles to test\n"
-            "3. Awareness stage\n"
-            "4. Key hook opportunities"
-        ),
-    )
-
-    # Save to Notion and post compact card
-    notion_url = None
     try:
-        from notion_sink import write_intel as _ni
-        signal = {"headline": f"Research: {topic}", "vertical": "Other",
-                  "summary": _extract_summary(synthesis), "source": "Research", "emotion": "Neutral"}
-        notion_url = _ni(signal)
+        (rc1, reddit_out), (rc2, news_out), (rc3, competitor_out) = await asyncio.gather(
+            _run_script("reddit_source.py", ["--limit", "10"]),
+            _run_script("news_watcher.py", ["--limit", "5"]),
+            _run_script("competitor_watcher.py", []),
+        )
+
+        synthesis = await _kimi(
+            system="You are an ad creative strategist. Synthesize research into a structured intelligence report.",
+            user=(
+                f"Topic: {topic}\nPlatform: {platform}\n\n"
+                f"Reddit:\n{reddit_out[-1000:]}\n\n"
+                f"News:\n{news_out[-1000:]}\n\n"
+                f"Competitors:\n{competitor_out[-1000:]}\n\n"
+                "Deliver:\n"
+                "1. Top 3 audience pain points with verbatim quotes\n"
+                "2. Top 3 angles to test\n"
+                "3. Awareness stage\n"
+                "4. Key hook opportunities"
+            ),
+        )
+
+        # Save to Notion
+        notion_url = None
+        try:
+            from notion_sink import write_intel as _ni
+            signal = {"headline": f"Research: {topic}", "vertical": "Other",
+                      "summary": _extract_summary(synthesis), "source": "Research", "emotion": "Neutral"}
+            notion_url = _ni(signal)
+        except Exception as e:
+            log.warning(f"Notion write failed: {e}")
+
+        # Build compact embed
+        pain_match = re.findall(r'(?:\d+\.\s+)(.{20,120})', synthesis)
+        preview = "\n".join(f"• {p.strip()}" for p in pain_match[:3]) or _extract_summary(synthesis, 280)
+
+        embed = discord.Embed(title=f"🔍 Research: {topic}", description=preview, color=0x2F80ED)
+        embed.add_field(name="Platform", value=platform.title(), inline=True)
+        if notion_url:
+            embed.add_field(name="📓 Full Report", value=f"[View in Notion]({notion_url})", inline=False)
+        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+
+        view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
+        await interaction.edit_original_response(content=None, embed=embed, view=view)
+
+        # Generate signal cards in background
+        asyncio.create_task(_run_script("signal_cards.py", ["--output", "loop/output/"]))
+
     except Exception as e:
-        log.warning(f"Notion write failed: {e}")
-
-    # Pull out the 3 pain points as a preview
-    pain_match = re.findall(r'(?:\d+\.\s+)(.{20,120})', synthesis)
-    preview = "\n".join(f"• {p.strip()}" for p in pain_match[:3]) or _extract_summary(synthesis, 280)
-
-    await _post_compact_card(
-        interaction,
-        title=f"🔍 Research: {topic}",
-        content=synthesis,
-        notion_url=notion_url,
-        color=0x2F80ED,
-        fields=[("Key Findings", preview, False), ("Platform", platform.title(), True)],
-    )
-
-    # Also generate signal cards
-    await _run_script("signal_cards.py", ["--output", "loop/output/"])
+        log.error(f"/research error: {e}")
+        await interaction.edit_original_response(content=f"❌ Research failed: {str(e)[:200]}")
 
 
 # ── 2. /full-brief ───────────────────────────────────────────────────────────
@@ -474,7 +494,7 @@ async def research(interaction: discord.Interaction, topic: str, platform: str =
 @app_commands.describe(topic="The topic / offer to brief", platform="Target ad platform")
 @app_commands.choices(platform=PLATFORM_CHOICES_NO_GENERAL)
 async def full_brief(interaction: discord.Interaction, topic: str, platform: str = "meta"):
-    await interaction.response.defer()
+    await interaction.response.send_message(f"📋 Building brief for **{topic}** ({platform})…")
 
     brief = await _kimi(
         system=(
@@ -503,14 +523,17 @@ async def full_brief(interaction: discord.Interaction, topic: str, platform: str
     except Exception as e:
         log.warning(f"Notion write failed: {e}")
 
-    await _post_compact_card(
-        interaction,
-        title=f"📋 Full Brief: {topic}",
-        content=brief,
-        notion_url=notion_url,
-        color=0x27AE60,
-        fields=[("Platform", platform.title(), True), ("Awareness", "See Notion →", True)],
-    )
+    summary = _extract_summary(brief)
+    embed = discord.Embed(title=f"📋 Full Brief: {topic}", description=summary, color=0x27AE60)
+    embed.add_field(name="Platform", value=platform.title(), inline=True)
+    if notion_url:
+        embed.add_field(name="📓 Full Brief", value=f"[View in Notion]({notion_url})", inline=False)
+    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+    view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
+    try:
+        await interaction.edit_original_response(content=None, embed=embed, view=view)
+    except Exception:
+        await interaction.followup.send(embed=embed, view=view)
 
 
 # ── 3. /gen-hooks ────────────────────────────────────────────────────────────
@@ -519,7 +542,7 @@ async def full_brief(interaction: discord.Interaction, topic: str, platform: str
 @app_commands.describe(topic="The topic to generate hooks for", awareness_stage="Schwartz awareness stage")
 @app_commands.choices(awareness_stage=AWARENESS_CHOICES)
 async def gen_hooks(interaction: discord.Interaction, topic: str, awareness_stage: str = "2-problem-aware"):
-    await interaction.response.defer()
+    await interaction.response.send_message(f"🎣 Generating hooks for **{topic}**…")
 
     hooks = await _kimi(
         system="You are a direct response copywriter expert in ACA hook framework.",
@@ -547,18 +570,17 @@ async def gen_hooks(interaction: discord.Interaction, topic: str, awareness_stag
     hook_lines = re.findall(r'\*\*#\d+.*?\*\*.*?\n(.+)', hooks)
     preview = "\n".join(f"• {h.strip()}" for h in hook_lines[:3]) or _extract_summary(hooks, 200)
 
-    await _post_compact_card(
-        interaction,
-        title=f"🎣 Hook Bank: {topic}",
-        content=hooks,
-        notion_url=notion_url,
-        color=0xF39C12,
-        fields=[
-            ("Top Hooks Preview", preview, False),
-            ("Stage", awareness_stage.replace("-", " ").title(), True),
-            ("Count", "20 hooks", True),
-        ],
-    )
+    embed = discord.Embed(title=f"🎣 Hook Bank: {topic}", description=preview, color=0xF39C12)
+    embed.add_field(name="Stage", value=awareness_stage.replace("-", " ").title(), inline=True)
+    embed.add_field(name="Count", value="20 hooks", inline=True)
+    if notion_url:
+        embed.add_field(name="📓 Full Hook Bank", value=f"[View in Notion]({notion_url})", inline=False)
+    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+    view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
+    try:
+        await interaction.edit_original_response(content=None, embed=embed, view=view)
+    except Exception:
+        await interaction.followup.send(embed=embed, view=view)
 
 
 # ── 4. /spy ──────────────────────────────────────────────────────────────────
