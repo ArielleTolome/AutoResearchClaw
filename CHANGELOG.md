@@ -1,5 +1,20 @@
 # AutoResearchClaw Changelog
 
+## [2.1.0] — 2026-03-15
+
+### 🤖 Discord Bot — One-Click Briefs
+
+#### New: `loop/bot/discord_bot.py`
+- Discord bot with persistent button interactions on signal cards
+- `/post-signals` slash command: fetches today signal cards JSON, posts as embeds with 5 action buttons
+- Button click → action_handler.py runs → result posted back as embed in <5 seconds
+- Actions: Brief, Persona, Hooks, Script, Image Concepts
+- Powered by Kimi M2.5-highspeed via action_handler.py
+- Config: `discord.bot_token` + `discord.signal_channel_id`
+- Run: `bash loop/bot/run_bot.sh`
+
+---
+
 ## [2.0.1] — 2026-03-15
 
 ### LLM Provider — Multi-Model Support
