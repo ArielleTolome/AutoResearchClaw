@@ -95,3 +95,17 @@ concept_vault:
 creative_tracker:
   table_id: 819
   baserow_url: "https://baserow.pfsend.com"
+
+# ── Sprint Planning (Baserow table 820) ──────────────────────────────────────
+sprint:
+  table_id: 820
+  default_offer: "Stimulus Assistance"
+  default_offer_code: "SA"
+  default_channel: "Meta"
+
+# ── Win Automation ────────────────────────────────────────────────────────────
+win_automation:
+  enabled: true
+  hook_swap_on_win: true
+  actor_swap_on_win: true
+  notify_discord: true

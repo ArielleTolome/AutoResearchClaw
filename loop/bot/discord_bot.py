@@ -938,6 +938,226 @@ async def tracker(interaction: discord.Interaction, view: str = "all", offer: st
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
+# ── 13. /sprint ──────────────────────────────────────────────────────────────
+
+SPRINT_VIEW_CHOICES = [
+    app_commands.Choice(name="All", value="all"),
+    app_commands.Choice(name="Planning", value="planning"),
+    app_commands.Choice(name="In Progress", value="in progress"),
+    app_commands.Choice(name="Ready for Review", value="ready for review"),
+    app_commands.Choice(name="Notes Given", value="notes given"),
+    app_commands.Choice(name="Ready to Launch", value="ready to launch"),
+    app_commands.Choice(name="Launched", value="launched"),
+]
+
+@bot.tree.command(name="sprint", description="View the creative production sprint queue")
+@app_commands.describe(view="Filter by status", offer="Filter by offer name")
+@app_commands.choices(view=SPRINT_VIEW_CHOICES)
+async def sprint(interaction: discord.Interaction, view: str = "all", offer: str = ""):
+    await interaction.response.defer()
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        import sprint_planner as sp
+
+        status_filter = None if view == "all" else view
+        rows = sp.get_jobs(status=status_filter, offer=offer or None)
+
+        if not rows:
+            await interaction.followup.send(
+                f"📭 No jobs found (filter: {view}, offer: {offer or 'any'})."
+            )
+            return
+
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for row in rows:
+            s = (row.get(f"field_{sp.F_STATUS}") or {}).get("value", "Planning")
+            groups[s].append(row)
+
+        KANBAN_ORDER_BOT = [
+            "Planning", "In Progress", "Ready for Review",
+            "Notes Given", "Ready to Launch", "Launched", "On Hold", "Killed",
+        ]
+        STATUS_EMOJI_BOT = {
+            "Planning": "📐", "In Progress": "🔨", "Ready for Review": "👀",
+            "Notes Given": "📝", "Ready to Launch": "🚀", "Launched": "✅",
+            "On Hold": "⏸️", "Killed": "💀",
+        }
+
+        title = "🏃 Sprint Queue"
+        if offer:
+            title += f" — {offer}"
+        if view != "all":
+            title += f" [{view.title()}]"
+
+        embed = discord.Embed(title=title, color=0x9B59B6)
+
+        for status in KANBAN_ORDER_BOT:
+            group = groups.get(status, [])
+            if not group:
+                continue
+            if view != "all" and status.lower() != view.lower():
+                continue
+            emoji = STATUS_EMOJI_BOT.get(status, "•")
+            lines = []
+            for row in group[:6]:
+                job_name = row.get(f"field_{sp.F_JOB_NAME}") or f"row:{row['id']}"
+                job_type = (row.get(f"field_{sp.F_JOB_TYPE}") or {}).get("value", "—")
+                angle = (row.get(f"field_{sp.F_ANGLE}") or "")[:30]
+                lines.append(f"`{job_name}` — {job_type}" + (f"\n  ↳ {angle}" if angle else ""))
+            if len(group) > 6:
+                lines.append(f"…and {len(group) - 6} more")
+            embed.add_field(
+                name=f"{emoji} {status} ({len(group)})",
+                value="\n".join(lines)[:1024],
+                inline=False,
+            )
+
+        embed.set_footer(text=f"AutoResearchClaw v2.4 · production_queue (Baserow 820) · {len(rows)} total jobs")
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        log.error(f"/sprint error: {e}")
+        try:
+            await interaction.edit_original_response(content=f"❌ Sprint error: {str(e)[:300]}")
+        except Exception:
+            await interaction.followup.send(f"❌ Sprint error: {str(e)[:300]}")
+
+
+# ── 14. /qa ───────────────────────────────────────────────────────────────────
+
+QA_PLATFORM_CHOICES = [
+    app_commands.Choice(name="Meta", value="meta"),
+    app_commands.Choice(name="TikTok", value="tiktok"),
+    app_commands.Choice(name="YouTube", value="youtube"),
+]
+
+@bot.tree.command(name="qa", description="Run AI QA checklist on a creative job")
+@app_commands.describe(
+    job_name="Job name (e.g. SA0001_...) or Baserow row ID",
+    platform="Platform to check against",
+)
+@app_commands.choices(platform=QA_PLATFORM_CHOICES)
+async def qa(interaction: discord.Interaction, job_name: str, platform: str = "meta"):
+    await interaction.response.defer()
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        import qa_checklist as qc
+        import sprint_planner as sp
+
+        # Resolve job_name → row_id
+        row_id = None
+        if job_name.isdigit():
+            row_id = int(job_name)
+        else:
+            # Search by job name
+            rows = sp.get_jobs()
+            for row in rows:
+                if (row.get(f"field_{sp.F_JOB_NAME}") or "").strip().lower() == job_name.strip().lower():
+                    row_id = row["id"]
+                    break
+            if row_id is None:
+                await interaction.followup.send(
+                    f"❌ Job `{job_name}` not found in production queue. Use the full job name or row ID."
+                )
+                return
+
+        result = qc.run_qa_with_kimi(row_id=row_id, platform=platform)
+
+        passed = result["passed"]
+        score = result["score"]
+        total = result["total"]
+        failed_items = result["failed_items"]
+        notes = result["notes"]
+        jname = result.get("job_name", str(row_id))
+
+        # Apply result to Baserow
+        qc._apply_qa_result(row_id, passed=passed, failed_items=failed_items, dry_run=False)
+
+        color = 0x2ECC71 if passed else 0xE74C3C
+        result_str = "✅ PASS" if passed else "❌ FAIL"
+
+        embed = discord.Embed(
+            title=f"QA {result_str}: {jname}",
+            description=notes[:500] if notes else "",
+            color=color,
+        )
+        embed.add_field(name="Score", value=f"{score}/{total} ({score/total:.0%})", inline=True)
+        embed.add_field(name="Platform", value=platform.title(), inline=True)
+
+        if failed_items:
+            failed_text = "\n".join(f"• {item[:80]}" for item in failed_items[:8])
+            embed.add_field(name="❌ Failed Checks", value=failed_text[:1024], inline=False)
+
+        status_set = "Ready to Launch" if passed else "Notes Given"
+        embed.add_field(name="Status Updated", value=status_set, inline=False)
+        embed.set_footer(text="AutoResearchClaw v2.4 · QA Gate · ACA Course 501")
+
+        try:
+            await interaction.edit_original_response(content=None, embed=embed)
+        except Exception:
+            await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        log.error(f"/qa error: {e}")
+        try:
+            await interaction.edit_original_response(content=f"❌ QA error: {str(e)[:300]}")
+        except Exception:
+            await interaction.followup.send(f"❌ QA error: {str(e)[:300]}")
+
+
+# ── 15. /ugc-brief ───────────────────────────────────────────────────────────
+
+@bot.tree.command(name="ugc-brief", description="Generate a UGC creator brief (ACA Course 502)")
+@app_commands.describe(
+    concept_id="Concept ID (e.g. c001)",
+    offer="Offer name (e.g. Stimulus Assistance)",
+    niche="Product niche (e.g. government benefits, supplements)",
+)
+async def ugc_brief(interaction: discord.Interaction, concept_id: str, offer: str, niche: str):
+    await interaction.response.send_message(
+        f"📋 Generating UGC brief for **{concept_id}** ({offer})…"
+    )
+    try:
+        system_prompt = (
+            "You are Rachel, an expert creative director specializing in UGC (User Generated Content) ads. "
+            "Generate a full UGC creator brief following the ACA Course 502 template exactly.\n\n"
+            "Include ALL of the following sections:\n"
+            "1. **Checklist** — what footage to capture (8-10 bullet points, specific and actionable)\n"
+            "2. **Shooting Tips** — lighting, audio, technical specs (1080p 30fps vertical), environment\n"
+            "3. **Step 1: You and your [niche]** — tell me about your peeves/concerns/stories "
+            "(2-3 prompts with example responses showing what good answers look like)\n"
+            "4. **Step 2: You and your [product]** — cover: first impressions, your ritual/routine, "
+            "what it feels like, how it works, results you've seen, and the CTA\n\n"
+            "Format guidelines:\n"
+            "- Be conversational, warm, and encouraging — address the creator as 'you'\n"
+            "- Be hyper-specific to the offer and niche (not generic)\n"
+            "- Each step should have 3-5 prompts with example answers in italics\n"
+            "- End with a brief Note to Creator reminding them to be authentic"
+        )
+
+        user_prompt = (
+            f"Concept ID: {concept_id}\n"
+            f"Offer: {offer}\n"
+            f"Niche: {niche}\n\n"
+            f"Generate the full UGC creator brief for this concept."
+        )
+
+        result = await _kimi(system=system_prompt, user=user_prompt, max_tokens=3000)
+
+        title = f"🎬 UGC Brief: {concept_id} — {offer}"
+        await _post_embed(interaction, title=title, description=result, color=0xE67E22)
+
+    except Exception as e:
+        log.error(f"/ugc-brief error: {e}")
+        try:
+            await interaction.edit_original_response(content=f"❌ UGC brief failed: {str(e)[:200]}")
+        except Exception:
+            await interaction.followup.send(f"❌ UGC brief failed: {str(e)[:200]}")
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
 def main():
     if not BOT_TOKEN:
         log.error("No bot token configured. Set discord.bot_token in config.yaml or DISCORD_BOT_TOKEN env var.")
