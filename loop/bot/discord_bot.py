@@ -947,6 +947,116 @@ async def tracker(interaction: discord.Interaction, view: str = "all", offer: st
 
 # ── 13. /sprint ──────────────────────────────────────────────────────────────
 
+# ── 12. /reframe ─────────────────────────────────────────────────────────────
+
+REFRAME_AWARENESS_CHOICES = [
+    app_commands.Choice(name="Not specified", value=""),
+    app_commands.Choice(name="1-unaware", value="1-unaware"),
+    app_commands.Choice(name="2-problem-aware", value="2-problem-aware"),
+    app_commands.Choice(name="3-solution-aware", value="3-solution-aware"),
+    app_commands.Choice(name="4-product-aware", value="4-product-aware"),
+    app_commands.Choice(name="5-most-aware", value="5-most-aware"),
+]
+
+@bot.tree.command(name="reframe", description="Generate 7 psychological offer reframes with audience intel from Qdrant")
+@app_commands.describe(
+    offer="The offer/product to reframe (e.g. 'ACA health insurance')",
+    audience="Target audience (e.g. 'uninsured Americans 25-55')",
+    current_angle="What angle you're currently running (optional — helps find fresh frames)",
+    skip_intel="Skip Qdrant audience intel pull",
+)
+async def reframe(interaction: discord.Interaction, offer: str, audience: str = "",
+                  current_angle: str = "", skip_intel: bool = False):
+    await interaction.response.send_message(
+        f"🔄 Reframing **{offer}**{' for ' + audience if audience else ''}…\n"
+        f"{'📡 Pulling audience intel from Qdrant…' if not skip_intel else '⏭️ Skipping intel pull'}"
+    )
+
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        from offer_reframe import reframe_offer
+
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: reframe_offer(
+                offer=offer,
+                audience=audience,
+                current_angle=current_angle,
+                with_intel=not skip_intel,
+                config=CFG,
+            )),
+            timeout=300,
+        )
+
+        if not result or not result.strip():
+            await interaction.edit_original_response(content="⚠️ Reframe returned empty. Try again.")
+            return
+
+        # Save to Notion
+        notion_url = None
+        try:
+            from notion_sink import write_action_output as _nw
+            signal = {"headline": f"Reframe: {offer}", "vertical": "Other",
+                      "summary": _extract_summary(result), "signal_id": "reframe"}
+            notion_url = _nw(signal, "offer_reframe", result)
+        except Exception as e:
+            log.warning(f"Notion write failed: {e}")
+
+        # Extract top pick for the preview
+        top_pick = ""
+        tp_match = re.search(r'(?:TOP PICK|🏆).*?\n+(.*?)(?:\n##|\Z)', result, re.DOTALL)
+        if tp_match:
+            top_pick = tp_match.group(1).strip()[:300]
+
+        # Count reframes found
+        reframe_count = len(re.findall(r'###?\s*\[?\d', result))
+
+        summary = top_pick or _extract_summary(result, 300)
+
+        embed = discord.Embed(
+            title=f"🔄 Offer Reframes: {offer[:60]}",
+            description=summary,
+            color=0x9B59B6,
+        )
+        if audience:
+            embed.add_field(name="Audience", value=audience[:100], inline=True)
+        if current_angle:
+            embed.add_field(name="Current Angle", value=current_angle[:100], inline=True)
+        embed.add_field(name="Reframes Generated", value=str(reframe_count or 7), inline=True)
+        embed.add_field(name="Intel", value="✅ Qdrant" if not skip_intel else "⏭️ Skipped", inline=True)
+
+        if notion_url:
+            embed.add_field(name="📓 Full Analysis", value=f"[View in Notion]({notion_url})", inline=False)
+        embed.set_footer(text="AutoResearchClaw v2.7 · Offer Reframe Engine · Schwartz + Hopkins + Hormozi")
+
+        # Also post the full result as a follow-up if no Notion
+        view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
+        await interaction.edit_original_response(content=None, embed=embed, view=view)
+
+        # If no Notion, post full result as chunked embeds
+        if not notion_url:
+            chunks = [result[i:i+4000] for i in range(0, len(result), 4000)]
+            for i, chunk in enumerate(chunks[:4]):  # Max 4 follow-ups
+                follow_embed = discord.Embed(
+                    description=chunk,
+                    color=0x9B59B6,
+                )
+                if i == len(chunks[:4]) - 1:
+                    follow_embed.set_footer(text="AutoResearchClaw v2.7 · Offer Reframe Engine")
+                await interaction.followup.send(embed=follow_embed)
+
+    except asyncio.TimeoutError:
+        await interaction.edit_original_response(content="⚠️ Reframe timed out after 5 min. Try a simpler offer description.")
+    except Exception as e:
+        log.error(f"/reframe error: {e}")
+        try:
+            await interaction.edit_original_response(content=f"❌ Reframe error: {str(e)[:300]}")
+        except Exception:
+            await interaction.followup.send(f"❌ Reframe error: {str(e)[:300]}")
+
+
+# ── 13. /sprint ──────────────────────────────────────────────────────────────
+
 SPRINT_VIEW_CHOICES = [
     app_commands.Choice(name="All", value="all"),
     app_commands.Choice(name="Planning", value="planning"),
