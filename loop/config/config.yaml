@@ -11,10 +11,8 @@ meta:
 
 # ── LLM (Challenger Generator) ───────────────────────────────────────────────
 llm:
-  provider: "anthropic"                        # Anthropic-compatible API (default; also works for minimax)
-  model: "MiniMax-M2.5-highspeed"             # Kimi — fast + cheap (~10x vs Sonnet)
-  base_url: "https://api.minimax.io/anthropic" # MiniMax Anthropic-compat endpoint
-  api_key: "sk-cp-nQu15NEQ73aNdVIrk4X9KMWjC63H9a5IqHbjGOAkQyf69ZsLh7ZqPo-P6zj9ZC5roYBYYqOymr9OzmptfO67yp6MrthgZWYQunjvkBfUtzCh8w4OFdZ18B4"  # MiniMax Kimi Ultra
+  provider: "claude-code"                      # Claude Code CLI via `claude --print --permission-mode bypassPermissions`
+  model: ~                                     # Controlled by claude CLI config (not used here)
 
   # ── Provider options (v2.6 Agent Mode) ─────────────────────────────────────
   # Switch provider with ONE line. All scripts auto-route via agent_runner.py.
@@ -90,7 +88,7 @@ approval_gate:
 
 # ── Notion Output Sink ────────────────────────────────────────────────────────
 notion:
-  api_key: ""  # Set via NOTION_API_KEY env var or fill in here (not committed)
+  api_key: ~  # Set via NOTION_API_KEY env var
   default_platform: "Meta"   # Used when platform not specified per-action
   # Database IDs (auto-created — do not change unless you recreate the databases)
   db_briefs:   "325bbf40-5fd2-81f7-be82-d15e47deef30"
