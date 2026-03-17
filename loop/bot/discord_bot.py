@@ -76,11 +76,11 @@ BASELINE_PATH = Path(__file__).parent.parent / "config" / "baseline.md"
 
 async def _run_script(script_name: str, args: list) -> tuple:
     proc = await asyncio.create_subprocess_exec(
-        "/root/AutoResearchClaw/venv/bin/python3",
+        "/Users/arieltolome/AutoResearchClaw/venv/bin/python3",
         str(SCRIPT_DIR / script_name), *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
-        cwd="/root/AutoResearchClaw"
+        cwd="/Users/arieltolome/AutoResearchClaw"
     )
     out, _ = await proc.communicate()
     return proc.returncode, out.decode(errors="replace")
@@ -107,12 +107,46 @@ async def _kimi(system: str, user: str, max_tokens: int = 2000) -> str:
         log.error(f"_kimi error: {e}")
         return f"⚠️ LLM error: {str(e)[:200]}"
 
+def _save_to_tracker(command: str, topic: str, output: str):
+    try:
+        import requests as _req
+        from datetime import date as _date
+        first_line = output.strip().split("\n")[0][:500]
+        row = {
+            "Test Status": "Waiting",
+            "Asset Type": "Net New",
+            "What are we testing?": command,
+            "Hook": first_line,
+            "Hypothesis": f"Generated via /{command} on: {topic[:200]}",
+            "Live Date": _date.today().isoformat(),
+        }
+        _req.post(
+            "https://baserow.pfsend.com/api/database/rows/table/819/?user_field_names=true",
+            headers={"Authorization": "Token f3tuAmChdNXWaXiVgdWJySdqYWqlYVqz"},
+            json=row, timeout=10,
+        )
+    except Exception as e:
+        log.warning(f"[tracker] Save failed: {e}")
+
+
+def _provider_label() -> str:
+    cfg = _load_config()
+    provider = cfg.get("llm", {}).get("provider", "minimax")
+    model = cfg.get("llm", {}).get("model", "") or ""
+    label_map = {
+        "minimax": "Kimi M2.5", "anthropic": "Claude",
+        "openai": "GPT", "claude-code": "Claude Code", "codex": "Codex",
+    }
+    label = label_map.get(provider.lower(), provider)
+    return f"{label} ({model})" if model and model not in label else label
+
+
 async def _post_embed(interaction, title, description, color):
     if not description or not description.strip():
         description = "*(no output)*"
     chunks = [description[i:i+4000] for i in range(0, len(description), 4000)]
     embed = discord.Embed(title=title, description=chunks[0], color=color)
-    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
     await interaction.followup.send(embed=embed)
     for chunk in chunks[1:]:
         await interaction.followup.send(embed=discord.Embed(description=chunk, color=color))
@@ -252,7 +286,7 @@ async def post_signals(interaction: discord.Interaction):
             description="\n".join(desc_parts),
             color=color,
         )
-        embed.set_footer(text="AutoResearchClaw v2.1 · Powered by Kimi M2.5")
+        embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
 
         view = SignalCardView(signal_id)
 
@@ -347,7 +381,7 @@ async def on_interaction(interaction: discord.Interaction):
                 description=f"```\n{error_text[:4000]}\n```",
                 color=0xE74C3C,
             )
-            error_embed.set_footer(text="AutoResearchClaw v2.1")
+            error_embed.set_footer(text="AutoResearchClaw v2.4.0")
             await interaction.edit_original_response(content=None, embed=error_embed)
             log.error(f"action_handler failed (exit {proc.returncode}): {error_text[:200]}")
             return
@@ -373,7 +407,7 @@ async def on_interaction(interaction: discord.Interaction):
         )
         if notion_url:
             result_embed.add_field(name="📓 Full Output", value=f"[View in Notion]({notion_url})", inline=False)
-        result_embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        result_embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
 
         view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
         await interaction.edit_original_response(content=None, embed=result_embed, view=view)
@@ -387,7 +421,7 @@ async def on_interaction(interaction: discord.Interaction):
             description=f"```\n{str(e)[:4000]}\n```",
             color=0xE74C3C,
         )
-        error_embed.set_footer(text="AutoResearchClaw v2.1")
+        error_embed.set_footer(text="AutoResearchClaw v2.4.0")
         try:
             await interaction.edit_original_response(content=None, embed=error_embed)
         except Exception:
@@ -486,7 +520,7 @@ async def research(interaction: discord.Interaction, topic: str, platform: str =
         embed.add_field(name="Platform", value=platform.title(), inline=True)
         if notion_url:
             embed.add_field(name="📓 Full Report", value=f"[View in Notion]({notion_url})", inline=False)
-        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
 
         view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
         await interaction.edit_original_response(content=None, embed=embed, view=view)
@@ -539,7 +573,7 @@ async def full_brief(interaction: discord.Interaction, topic: str, platform: str
     embed.add_field(name="Platform", value=platform.title(), inline=True)
     if notion_url:
         embed.add_field(name="📓 Full Brief", value=f"[View in Notion]({notion_url})", inline=False)
-    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
     view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
     try:
         await interaction.edit_original_response(content=None, embed=embed, view=view)
@@ -577,16 +611,22 @@ async def gen_hooks(interaction: discord.Interaction, topic: str, awareness_stag
     except Exception as e:
         log.warning(f"Notion write failed: {e}")
 
-    # Show top 3 hooks as a preview field
-    hook_lines = re.findall(r'\*\*#\d+.*?\*\*.*?\n(.+)', hooks)
-    preview = "\n".join(f"• {h.strip()}" for h in hook_lines[:3]) or _extract_summary(hooks, 200)
+    # Show top 5 hooks as a preview field  (format: • [Type] 8/10 — "Hook text")
+    hook_matches = re.findall(r'\*\*#\d+\s*\[([^\]]+)\]\*\*\s*\(score:\s*(\d+)/10\)\s*\n(.+)', hooks)
+    if hook_matches:
+        preview = "\n".join(
+            f"• [{typ}] {score}/10 — \"{txt.strip()}\""
+            for typ, score, txt in hook_matches[:5]
+        )
+    else:
+        preview = _extract_summary(hooks, 200)
 
     embed = discord.Embed(title=f"🎣 Hook Bank: {topic}", description=preview, color=0xF39C12)
     embed.add_field(name="Stage", value=awareness_stage.replace("-", " ").title(), inline=True)
     embed.add_field(name="Count", value="20 hooks", inline=True)
     if notion_url:
         embed.add_field(name="📓 Full Hook Bank", value=f"[View in Notion]({notion_url})", inline=False)
-    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
     view = _notion_link_view(notion_url) if notion_url else discord.utils.MISSING
     try:
         await interaction.edit_original_response(content=None, embed=embed, view=view)
@@ -651,7 +691,7 @@ async def spy(interaction: discord.Interaction, keyword: str, days_running: int 
         )
 
         embed = discord.Embed(title=f"🕵️ Spy: {keyword}", description=analysis[:4000], color=0xE74C3C)
-        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
         await interaction.edit_original_response(content=None, embed=embed)
     except Exception as e:
         log.error(f"/spy error: {e}")
@@ -687,7 +727,7 @@ async def daily_intel(interaction: discord.Interaction):
             desc += f"{status} `{script}` (exit {rc})\n"
 
         embed = discord.Embed(title="📰 Daily Intel Complete", description=desc[:4000], color=0x9B59B6)
-        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
         await interaction.edit_original_response(content=None, embed=embed)
     except Exception as e:
         log.error(f"/daily-intel error: {e}")
@@ -723,7 +763,7 @@ async def loop_status(interaction: discord.Interaction):
     embed.add_field(name="Learnings", value=f"{learnings_words} words", inline=True)
     embed.add_field(name="Last Learnings", value=f"```\n{learnings_text[-200:]}\n```" if learnings_text else "None yet", inline=False)
     embed.add_field(name="Baseline Preview", value=f"```\n{baseline_preview}\n```" if baseline_preview else "Not set", inline=False)
-    embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
 
     await interaction.response.send_message(embed=embed)
 
@@ -752,7 +792,7 @@ async def score(interaction: discord.Interaction, copy: str):
         color = 0x27AE60 if total >= 50 else (0xF39C12 if total >= 35 else 0xE74C3C)
 
         embed = discord.Embed(title="📊 Copy Score", description=result[:4000], color=color)
-        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
         await interaction.edit_original_response(content=None, embed=embed)
     except Exception as e:
         log.error(f"/score error: {e}")
@@ -771,7 +811,7 @@ async def intel_digest(interaction: discord.Interaction):
         else:
             desc = out[-500:] if out.strip() else "Digest generated (no stdout output)."
         embed = discord.Embed(title="📰 Intel Digest", description=desc[:4000], color=0x8E44AD)
-        embed.set_footer(text="AutoResearchClaw v2.2 · Powered by Kimi M2.5")
+        embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
         await interaction.edit_original_response(content=None, embed=embed)
     except Exception as e:
         log.error(f"/intel-digest error: {e}")
@@ -1516,6 +1556,173 @@ async def provider_cmd(interaction: discord.Interaction):
     embed.set_footer(text="AutoResearchClaw v2.6 · Change provider in loop/config/config.yaml → llm.provider")
 
     await interaction.response.send_message(embed=embed)
+
+
+# ── Variation Commands (v2.4.0) ───────────────────────────────────────────────
+
+SPIN_BLOCK_CHOICES = [
+    app_commands.Choice(name="hook", value="hook"),
+    app_commands.Choice(name="body", value="body"),
+    app_commands.Choice(name="cta", value="cta"),
+    app_commands.Choice(name="angle", value="angle"),
+]
+
+FORMAT_CHOICES = [
+    app_commands.Choice(name="ugc", value="ugc"),
+    app_commands.Choice(name="static", value="static"),
+    app_commands.Choice(name="testimonial", value="testimonial"),
+    app_commands.Choice(name="vsl", value="vsl"),
+    app_commands.Choice(name="carousel", value="carousel"),
+]
+
+
+@bot.tree.command(name="spin", description="Generate 8 distinct variations of one ad block")
+@app_commands.describe(topic="The topic to generate spins for", block="Which ad block to spin")
+@app_commands.choices(block=SPIN_BLOCK_CHOICES)
+async def spin(interaction: discord.Interaction, topic: str, block: str = "hook"):
+    await interaction.response.send_message(f"🔄 Spinning **{block}** variations for **{topic}**…")
+    result = await _kimi(
+        system="You are a direct response copywriter. Generate distinct variations of one ad block.",
+        user=f"Generate 8 {block} variations for: {topic}\n\nEach should feel distinct — different emotion, angle, or execution. Number them 1-8. Be specific, not generic.",
+        max_tokens=2000,
+    )
+    embed = discord.Embed(title=f"🔄 {block.title()} Spins: {topic}", description=result[:4000], color=0x3498DB)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
+    _save_to_tracker(f"spin-{block}", topic, result)
+
+
+@bot.tree.command(name="remix", description="Combine best elements of two ad concepts into 3 hybrids")
+@app_commands.describe(concept_a="First ad concept", concept_b="Second ad concept")
+async def remix(interaction: discord.Interaction, concept_a: str, concept_b: str):
+    await interaction.response.send_message(f"🧬 Remixing concepts…")
+    result = await _kimi(
+        system="You are a direct response copywriter. Combine the best elements of two ad concepts.",
+        user=f"Concept A: {concept_a}\nConcept B: {concept_b}\n\nCreate 3 hybrid ad concepts that take the hook style from A, the body argument from B, and write a fresh CTA. Label each hybrid clearly.",
+        max_tokens=2000,
+    )
+    embed = discord.Embed(title=f"🧬 Remix: {concept_a} × {concept_b}", description=result[:4000], color=0x9B59B6)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
+    _save_to_tracker("remix", f"{concept_a} x {concept_b}", result)
+
+
+@bot.tree.command(name="awareness-shift", description="Rewrite ad concept for a different awareness stage")
+@app_commands.describe(topic="The ad topic", from_stage="Current awareness stage", to_stage="Target awareness stage")
+@app_commands.choices(from_stage=AWARENESS_CHOICES, to_stage=AWARENESS_CHOICES)
+async def awareness_shift(interaction: discord.Interaction, topic: str, from_stage: str, to_stage: str):
+    await interaction.response.send_message(f"🎯 Shifting awareness for **{topic}**…")
+    result = await _kimi(
+        system="You are a direct response copywriter expert in Schwartz awareness stages.",
+        user=f"Topic: {topic}\n\nRewrite this ad concept for awareness stage shift:\nFROM: {from_stage}\nTO: {to_stage}\n\nAdjust: hook entry point, body language, CTA directness. Output the rewritten hook, body (3-4 sentences), and CTA for the target stage.",
+        max_tokens=2000,
+    )
+    embed = discord.Embed(title=f"🎯 Awareness Shift: {topic}", description=result[:4000], color=0xE67E22)
+    embed.add_field(name="From", value=from_stage.replace("-", " ").title(), inline=True)
+    embed.add_field(name="To", value=to_stage.replace("-", " ").title(), inline=True)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
+    _save_to_tracker("awareness-shift", topic, result)
+
+
+@bot.tree.command(name="format-adapt", description="Generate a format-specific creative brief")
+@app_commands.describe(topic="The ad topic", format="Target ad format")
+@app_commands.choices(format=FORMAT_CHOICES)
+async def format_adapt(interaction: discord.Interaction, topic: str, format: str = "ugc"):
+    await interaction.response.send_message(f"📐 Adapting for **{format.upper()}** format…")
+    result = await _kimi(
+        system="You are a direct response creative director.",
+        user=f"Topic: {topic}\nTarget Format: {format}\n\nAdapt the core ad concept for this format. Specify: ideal length, visual style, hook delivery (text vs spoken vs visual), body structure for format, CTA placement. Output a format-specific creative brief.",
+        max_tokens=2000,
+    )
+    embed = discord.Embed(title=f"📐 Format Adapt: {format.upper()} — {topic}", description=result[:4000], color=0x1ABC9C)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
+    _save_to_tracker("format-adapt", topic, result)
+
+
+@bot.tree.command(name="persona-swap", description="Rewrite ad angle for a specific persona")
+@app_commands.describe(topic="The ad topic", persona="Target persona description")
+async def persona_swap(interaction: discord.Interaction, topic: str, persona: str):
+    await interaction.response.send_message(f"👤 Swapping persona to **{persona}**…")
+    result = await _kimi(
+        system="You are a direct response copywriter who deeply understands audience psychology.",
+        user=f"Topic: {topic}\nPersona: {persona}\n\nRewrite the ad angle for this specific persona. Adjust: pain point framing, language level and tone, aspirational outcome, identity signals. Output hook, body (3-4 sentences), CTA.",
+        max_tokens=2000,
+    )
+    embed = discord.Embed(title=f"👤 Persona Swap: {persona}", description=result[:4000], color=0x27AE60)
+    embed.add_field(name="Topic", value=topic, inline=True)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
+    _save_to_tracker("persona-swap", topic, result)
+
+
+@bot.tree.command(name="angle-matrix", description="Map offer across all 10 ACA angles")
+@app_commands.describe(offer="The offer to analyze")
+async def angle_matrix(interaction: discord.Interaction, offer: str):
+    await interaction.response.send_message(f"🗺️ Building angle matrix for **{offer}**…")
+    result = await _kimi(
+        system="You are an ad creative strategist using the ACA 10-angle framework.",
+        user=(
+            f"Offer: {offer}\n\n"
+            "Map this offer across all 10 ACA angles:\n"
+            "1. Fear/Pain\n2. Desire/Aspiration\n3. Social Proof\n4. Authority/Credibility\n"
+            "5. Curiosity/Intrigue\n6. Value/ROI\n7. Urgency/Scarcity\n8. Identity/Tribe\n"
+            "9. Before/After Transformation\n10. Contrarian/Pattern Interrupt\n\n"
+            "For each angle: 1-sentence hook idea, best awareness stage, and whether it is likely overused in this vertical (yes/no)."
+        ),
+        max_tokens=2500,
+    )
+    embed = discord.Embed(title=f"🗺️ Angle Matrix: {offer}", description=result[:4000], color=0xF1C40F)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
+
+
+@bot.tree.command(name="hook-ladder", description="Rewrite one hook across all 17 ACA execution types")
+@app_commands.describe(hook="The original hook to rewrite")
+async def hook_ladder(interaction: discord.Interaction, hook: str):
+    await interaction.response.send_message(f"🪜 Building hook ladder…")
+    result = await _kimi(
+        system="You are a direct response copywriter expert in all 17 ACA hook execution types.",
+        user=(
+            f"Original hook: {hook}\n\n"
+            "Rewrite this hook in all 17 ACA execution styles:\n"
+            "1. Question\n2. Shocking Stat\n3. Contrarian\n4. Story\n5. How-To\n"
+            "6. Fear\n7. Desire\n8. Social Proof\n9. Newsjacking\n10. Empathy\n"
+            "11. Teaser\n12. Negative\n13. Bold Claim\n14. Before/After\n15. Authority\n"
+            "16. Urgency\n17. Identification\n\n"
+            "Keep the same core message, change only the execution type. Number each clearly."
+        ),
+        max_tokens=2500,
+    )
+    embed = discord.Embed(title="🪜 Hook Ladder", description=result[:4000], color=0xE74C3C)
+    embed.add_field(name="Original", value=hook[:1024], inline=False)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
+
+
+@bot.tree.command(name="fatigue-check", description="Evaluate creative fatigue and get pattern interrupt suggestions")
+@app_commands.describe(concept="The ad concept to evaluate")
+async def fatigue_check(interaction: discord.Interaction, concept: str):
+    await interaction.response.send_message(f"⚠️ Checking creative fatigue…")
+    result = await _kimi(
+        system="You are a creative strategist evaluating creative fatigue.",
+        user=(
+            f"Concept: {concept}\n\n"
+            "Evaluate this ad concept for creative fatigue signals:\n"
+            "1. How generic/overused is the angle in performance marketing?\n"
+            "2. What makes it feel fresh or stale?\n"
+            "3. Estimated market saturation (low/medium/high)?\n"
+            "4. Suggest 2 pattern interrupts to refresh it.\n"
+            "Be direct and specific."
+        ),
+        max_tokens=2000,
+    )
+    fatigue_color = 0xE74C3C if "high" in result.lower() else 0xF39C12
+    embed = discord.Embed(title="⚠️ Fatigue Check", description=result[:4000], color=fatigue_color)
+    embed.add_field(name="Concept", value=concept[:1024], inline=False)
+    embed.set_footer(text=f"AutoResearchClaw v2.4.0 · Powered by {_provider_label()}")
+    await interaction.edit_original_response(content=None, embed=embed)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────

@@ -201,45 +201,61 @@ def write_hooks(signal: dict, hooks_content: str, platform: str = "Meta") -> Opt
     platform_map = {"meta": "Meta", "native": "Native", "tiktok": "TikTok", "youtube": "YouTube"}
     platform_clean = platform_map.get(platform.lower(), "Meta")
 
-    # Parse individual hooks from the content (lines starting with 1., 2., etc.)
-    hook_lines = re.findall(r'^\d+[\.\)]\s+(.+)', hooks_content, re.MULTILINE)
+    # Parse hooks using the **#N [Type]** (score: X/10)\nHook text format
+    structured = re.findall(
+        r'\*\*#\d+\s*\[([^\]]+)\]\*\*\s*\(score:\s*(\d+)/10\)\s*\n(.+)',
+        hooks_content
+    )
 
-    if not hook_lines:
-        # Fallback: treat entire content as one entry
-        hook_lines = [hooks_content[:500]]
+    if structured:
+        hook_entries = [(typ.strip(), int(sc), txt.strip()) for typ, sc, txt in structured]
+    else:
+        # Fallback: parse numbered lines and keyword-guess type
+        raw_lines = re.findall(r'^\d+[\.\)]\s+(.+)', hooks_content, re.MULTILINE)
+        if not raw_lines:
+            raw_lines = [hooks_content[:500]]
+        hook_entries = []
+        for ht in raw_lines:
+            ht = ht.strip()
+            if not ht:
+                continue
+            hook_type = "Direct"
+            lower = ht.lower()
+            if "?" in ht:
+                hook_type = "Question"
+            elif any(w in lower for w in ["never", "stop", "worst", "mistake", "warning", "danger"]):
+                hook_type = "Negative"
+            elif any(w in lower for w in ["%", "out of", "in 10", "million", "billion"]):
+                hook_type = "Statistic"
+            elif any(w in lower for w in ["story", "when i", "one day", "i was"]):
+                hook_type = "Story"
+            elif any(w in lower for w in ["secret", "what they don't", "nobody tells"]):
+                hook_type = "Curiosity"
+            elif any(w in lower for w in ["limited", "expires", "today only", "last chance"]):
+                hook_type = "Urgency"
+            elif any(w in lower for w in ["most people", "everyone thinks", "contrary"]):
+                hook_type = "Contrarian"
+            hook_entries.append((hook_type, None, ht))
 
     created_urls = []
-    for hook_text in hook_lines[:20]:  # cap at 20
-        hook_text = hook_text.strip()
-        if not hook_text:
-            continue
-
-        # Detect hook type from keywords
-        hook_type = "Direct"
-        lower = hook_text.lower()
-        if "?" in hook_text:
-            hook_type = "Question"
-        elif any(w in lower for w in ["never", "stop", "worst", "mistake", "warning", "danger"]):
-            hook_type = "Negative"
-        elif any(w in lower for w in ["%", "out of", "in 10", "million", "billion"]):
-            hook_type = "Statistic"
-        elif any(w in lower for w in ["story", "when i", "one day", "i was"]):
-            hook_type = "Story"
-        elif any(w in lower for w in ["secret", "what they don't", "nobody tells"]):
-            hook_type = "Curiosity"
-        elif any(w in lower for w in ["limited", "expires", "today only", "last chance"]):
-            hook_type = "Urgency"
-        elif any(w in lower for w in ["most people", "everyone thinks", "contrary"]):
-            hook_type = "Contrarian"
+    for entry in hook_entries[:20]:  # cap at 20
+        hook_type, hook_score, hook_text = entry
+        # Strip any remaining markdown from hook title
+        clean_title = re.sub(r'\*\*#?\d*\s*\[[^\]]*\]\*\*\s*', '', hook_text).strip()
+        clean_title = re.sub(r'\(score:\s*\d+/10\)\s*', '', clean_title).strip()
+        if not clean_title:
+            clean_title = hook_text[:200]
 
         properties = {
-            "Hook": {"title": _rich_text(hook_text[:200])},
+            "Hook": {"title": _rich_text(clean_title[:200])},
             "Type": {"select": {"name": hook_type}},
             "Vertical": {"select": {"name": vertical_clean}},
             "Platform": {"select": {"name": platform_clean}},
             "Signal": {"rich_text": _rich_text(headline[:2000])},
             "Created": {"date": {"start": date.today().isoformat()}},
         }
+        if hook_score is not None:
+            properties["Score"] = {"number": hook_score}
 
         page = _create_page(DB_HOOKS, properties)
         if page:
