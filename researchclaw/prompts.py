@@ -700,6 +700,30 @@ _DEFAULT_STAGES: dict[str, dict[str, Any]] = {
         ),
         "json_mode": True,
     },
+    "ads_literature_collect": {
+        "system": (
+            "You are an expert ad creative intelligence analyst. "
+            "You synthesize competitor ad creative data, audience language, "
+            "and market intelligence for performance marketing campaigns."
+        ),
+        "user": (
+            "Generate 12 ad creative intelligence candidates for the following topic.\n"
+            "Return JSON: {{\"candidates\": [...]}}\n"
+            "Each candidate must have: id, title, source, source_type, url, year, abstract, "
+            "awareness_stage, emotional_driver, collected_at.\n\n"
+            "source_type must be one of: ad_creative, audience_language, competitor_intel, trend_signal\n"
+            "awareness_stage must be one of: unaware, problem_aware, solution_aware, product_aware, most_aware\n"
+            "abstract should be 100-300 words of actual ad copy, hook examples, audience pain points, "
+            "or competitor messaging angles — real creative intelligence, not descriptions.\n\n"
+            "Topic: {topic}\n\n"
+            "Generate diverse candidates covering:\n"
+            "- 4 competitor ad hooks and copy angles\n"
+            "- 3 audience pain point and desire statements (their exact language)\n"
+            "- 3 objection/skepticism patterns common in this niche\n"
+            "- 2 trend signals or market shifts relevant to this offer"
+        ),
+        "json_mode": True,
+    },
     "literature_screen": {
         "system": (
             "You are a strict domain-aware reviewer with zero tolerance for "

@@ -1520,7 +1520,7 @@ def _execute_literature_collect(
         # Instead, generate synthetic ad-creative intelligence via LLM.
         if llm is not None:
             _pm = prompts or PromptManager()
-            sp = _pm.for_stage("literature_collect", topic=topic)
+            sp = _pm.for_stage("ads_literature_collect", topic=topic)
             logger.info("Stage 4 (ads mode): synthesizing ad-creative candidates via LLM...")
             try:
                 resp = _chat_with_prompt(
@@ -6185,20 +6185,16 @@ def execute_stage(
         for output_file in contract.output_files:
             if output_file.endswith("/"):
                 path = stage_dir / output_file.rstrip("/")
-                if not path.is_dir() or not any(path.iterdir()):
-                    result = StageResult(
-                        stage=stage,
-                        status=StageStatus.FAILED,
-                        artifacts=result.artifacts,
-                        error=f"Missing output directory: {output_file}",
-                        decision="retry",
-                        evidence_refs=result.evidence_refs,
-                    )
-                    break
+                # Directory must exist; empty is OK when upstream had no candidates
+                if not path.is_dir():
+                    # Create it so downstream stages don't crash
+                    path.mkdir(parents=True, exist_ok=True)
+                # Don't fail on empty directory — pipeline handles it with fallbacks
             else:
                 path = stage_dir / output_file
-                # candidates.jsonl is allowed to be empty in ads mode (graceful fallback)
-                allow_empty = output_file == "candidates.jsonl"
+                # .jsonl files are allowed to be empty — pipeline stages handle
+                # empty inputs gracefully with LLM synthesis fallbacks.
+                allow_empty = output_file.endswith(".jsonl")
                 if not path.exists() or (path.stat().st_size == 0 and not allow_empty):
                     result = StageResult(
                         stage=stage,

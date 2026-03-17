@@ -281,17 +281,19 @@ def fetch_facebook_ad_library(topic: str, *, limit: int = 15) -> list[dict[str, 
         try:
             # Extract short keyword from topic for search
             keyword = " ".join(topic.split()[:6])
-            api_url = (
-                "https://graph.facebook.com/v21.0/ads_archive"
-                f"?access_token={token}"
-                f"&search_terms={urllib.parse.quote(keyword)}"
-                "&ad_reached_countries=['US']"
-                "&ad_active_status=ALL"
-                "&fields=id,ad_creative_bodies,ad_creative_link_captions,"
-                "ad_creative_link_descriptions,ad_creative_link_titles,"
-                "page_name,ad_delivery_start_time,ad_delivery_stop_time"
-                f"&limit={min(limit, 25)}"
-            )
+            params = urllib.parse.urlencode({
+                "access_token": token,
+                "search_terms": keyword,
+                "ad_reached_countries": '["US"]',
+                "ad_active_status": "ALL",
+                "fields": (
+                    "id,ad_creative_bodies,ad_creative_link_captions,"
+                    "ad_creative_link_descriptions,ad_creative_link_titles,"
+                    "page_name,ad_delivery_start_time,ad_delivery_stop_time"
+                ),
+                "limit": min(limit, 25),
+            })
+            api_url = f"https://graph.facebook.com/v21.0/ads_archive?{params}"
             raw = _http_get(api_url, timeout=15)
             data = json.loads(raw)
             ads = data.get("data", [])
