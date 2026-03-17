@@ -72,3 +72,10 @@ cli_pause
 
 .venv_arc/
 /config.arc.yaml
+
+# Live config files with secrets (use *.example.yaml templates)
+/config.arc.ads.yaml
+/config.arc.ads.native.yaml
+/config.arc.ads.tiktok.yaml
+/config.arc.ads.youtube.yaml
+/loop/config/config.yaml

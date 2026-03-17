@@ -648,7 +648,7 @@ async def spy(interaction: discord.Interaction, keyword: str, days_running: int 
         try:
             url = "https://api.anstrex.com/api/v1/en/creative/search"
             headers = {
-                "Authorization": "Bearer 631281|opCWb4Y22xWM1AidmVUjyLVAFe0y08F0uesjEQqy71c6a5b3",
+                "Authorization": f"Bearer {os.getenv('ANSTREX_TOKEN', '')}",
                 "Origin": "https://native.anstrex.com",
                 "Referer": "https://native.anstrex.com/",
             }
@@ -1726,6 +1726,17 @@ async def fatigue_check(interaction: discord.Interaction, concept: str):
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
+
+# ── ARC Pipeline commands (23-stage ResearchClaw) ────────────────────────────
+
+try:
+    sys.path.insert(0, str(Path(__file__).parent))
+    from arc_pipeline_commands import register_arc_commands
+    register_arc_commands(bot)
+    log.info("ARC pipeline commands registered (/arc-run, /arc-status, /arc-approve, /arc-reject, /arc-pause, /arc-resume, /arc-stage, /arc-logs)")
+except Exception as _arc_err:
+    log.warning(f"ARC pipeline commands failed to load: {_arc_err}")
+
 
 def main():
     if not BOT_TOKEN:

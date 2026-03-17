@@ -264,7 +264,7 @@ def fetch_reddit(topic: str, *, limit: int = 10) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 _FB_ACCESS_TOKEN = (
-    "EAAkLZBkudbJsBQypE8lgS2Cr5HWYacXqbpJB1ODj9MQ7xKRzJD1FXbvFGN9qBcHYTCt42ZCiTvtOpuHlZByhK6ZBUxukyzZCp4vv5AdATWqlKp07BsYyzAVj5AmifmI7Wz10sK7FfTAl8BRhpeaqzn2ODuZChwUI9ZAGRpkPuRvKbuwatpMKyF27gL9XpQ0SPTP0usuZBoTgPAudaxiv32xpTSnl1SEIQLfvxXg4J344rMIySbzGCYE3"
+    os.getenv("FB_ADS_TOKEN", "")
 )
 
 

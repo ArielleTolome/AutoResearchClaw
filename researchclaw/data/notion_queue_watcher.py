@@ -78,7 +78,10 @@ def _token() -> str:
     except Exception:
         pass
     if not tok:
-        tok = os.getenv("NOTION_API_KEY", "")
+        raise RuntimeError(
+            "Notion API key not configured. Set NOTION_API_KEY env var "
+            "or notion.api_key in config.yaml"
+        )
     return tok
 
 

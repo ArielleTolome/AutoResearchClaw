@@ -59,9 +59,8 @@ DISCORD_WEBHOOK = CFG.get("notifications", {}).get("discord_webhook", "") or \
 GEMINI_BIN = CFG.get("gemini", {}).get("binary", "gemini")
 VIDEO_DOWNLOAD_DIR = CFG.get("gemini", {}).get("video_download_dir", "/tmp")
 MAX_VIDEO_SIZE_MB = CFG.get("gemini", {}).get("max_video_size_mb", 100)
-FOREPLAY_API_KEY = "mEdti_y0hpgqamGgSnsAso5YRyBVXLLZlfKjveFDzw6zPWoZcApIcY1jZpDpejvT8fNCOqU0209yBnVpWI04dQ"
-FB_ACCESS_TOKEN = CFG.get("fb_ads_library", {}).get("access_token", "") or \
-                  "EAAkLZBkudbJsBQypE8lgS2Cr5HWYacXqbpJB1ODj9MQ7xKRzJD1FXbvFGN9qBcHYTCt42ZCiTvtOpuHlZByhK6ZBUxukyzZCp4vv5AdATWqlKp07BsYyzAVj5AmifmI7Wz10sK7FfTAl8BRhpeaqzn2ODuZChwUI9ZAGRpkPuRvKbuwatpMKyF27gL9XpQ0SPTP0usuZBoTgPAudaxiv32xpTSnl1SEIQLfvxXg4J344rMIySbzGCYE3"
+FOREPLAY_API_KEY = os.getenv("FOREPLAY_API_KEY", "")
+FB_ACCESS_TOKEN = CFG.get("fb_ads_library", {}).get("access_token", "") or os.getenv("FB_ADS_TOKEN", "")
 
 # ── Gemini dissect prompt (same as ad_dissect.py) ─────────────────────────────
 GEMINI_PROMPT = """You are an expert ad creative analyst trained in Ad Creative Academy methodology and Schwartz Breakthrough Advertising doctrine.
