@@ -187,9 +187,28 @@ def _extract_yaml_block(text: str) -> str:
 
 
 def _safe_json_loads(text: str, default: Any) -> Any:
+    """Parse JSON from LLM response, handling think-blocks and markdown fences."""
+    if not text:
+        return default
+    import re as _re
+    # 1. Strip <think>...</think> reasoning blocks (MiniMax/DeepSeek style)
+    cleaned = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
+    # 2. Strip ```json ... ``` or ``` ... ``` code fences
+    fenced = _re.match(r"^```(?:json)?\s*([\s\S]*?)```\s*$", cleaned)
+    if fenced:
+        cleaned = fenced.group(1).strip()
+    # 3. If still not clean, try to extract first {...} or [...] block
+    if not cleaned:
+        cleaned = text
     try:
-        return json.loads(text)
+        return json.loads(cleaned)
     except Exception:  # noqa: BLE001
+        # Last resort: find first valid JSON object or array
+        for match in _re.finditer(r"(\{[\s\S]*\}|\[[\s\S]*\])", cleaned):
+            try:
+                return json.loads(match.group(0))
+            except Exception:  # noqa: BLE001
+                continue
         return default
 
 
