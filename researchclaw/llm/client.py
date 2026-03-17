@@ -34,6 +34,7 @@ import json
 import logging
 import os
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -462,7 +463,14 @@ class LLMClient:
         """
         import shutil
 
-        cli_path = shutil.which("claude") or "claude"
+        _claude_search_paths = [
+            shutil.which("claude"),
+            os.path.expanduser("~/.nvm/versions/node/v22.22.1/bin/claude"),
+            "/usr/local/bin/claude",
+            "/opt/homebrew/bin/claude",
+            "/usr/bin/claude",
+        ]
+        cli_path = next((p for p in _claude_search_paths if p and os.path.isfile(p)), "claude")
 
         # Separate system messages from the conversation
         system_parts: list[str] = []
@@ -557,7 +565,14 @@ class LLMClient:
         """
         import shutil
 
-        cli_path = shutil.which("gemini") or "gemini"
+        _gemini_search_paths = [
+            shutil.which("gemini"),
+            os.path.expanduser("~/.nvm/versions/node/v22.22.1/bin/gemini"),
+            "/usr/local/bin/gemini",
+            "/opt/homebrew/bin/gemini",
+            "/usr/bin/gemini",
+        ]
+        cli_path = next((p for p in _gemini_search_paths if p and os.path.isfile(p)), "gemini")
 
         # Separate system messages from conversation
         system_parts: list[str] = []
@@ -686,9 +701,16 @@ class LLMClient:
         --json gives us JSONL with token usage from turn.completed.
         """
         import shutil
-        import tempfile
 
-        cli_path = shutil.which("codex") or "codex"
+        # Look for codex in well-known install locations in case PATH is stripped
+        _codex_search_paths = [
+            shutil.which("codex"),
+            os.path.expanduser("~/.nvm/versions/node/v22.22.1/bin/codex"),
+            "/usr/local/bin/codex",
+            "/opt/homebrew/bin/codex",
+            "/usr/bin/codex",
+        ]
+        cli_path = next((p for p in _codex_search_paths if p and os.path.isfile(p)), "codex")
 
         # Separate system messages from conversation
         system_parts: list[str] = []
