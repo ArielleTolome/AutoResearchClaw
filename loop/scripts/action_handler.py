@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 action_handler.py — Intel-to-Brief in One Click (AutoResearchClaw v2.0)
 Takes a signal ID and an action, fetches the signal from Baserow, calls

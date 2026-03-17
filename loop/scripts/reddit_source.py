@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 reddit_source.py — Reddit audience language miner for AutoResearchClaw
 Fetches hot/top posts from leadgen subreddits, scores with Codex CLI,

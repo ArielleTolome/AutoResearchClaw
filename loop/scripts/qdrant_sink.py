@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 qdrant_sink.py — Qdrant vector memory layer for AutoResearchClaw signals.
 Embeds and stores signals (news + reddit) for semantic search and trend detection.

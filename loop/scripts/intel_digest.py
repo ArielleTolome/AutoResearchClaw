@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 intel_digest.py — Daily morning digest for AutoResearchClaw
 Reads last 24h from Baserow tables 767 (news) and 818 (reddit audience signals),

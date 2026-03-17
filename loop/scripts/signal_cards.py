@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 signal_cards.py — Generate button payload JSON for the OpenClaw Rachel bot.
 Reads fresh signals from Baserow (last 24h, tables 767 + 818), builds

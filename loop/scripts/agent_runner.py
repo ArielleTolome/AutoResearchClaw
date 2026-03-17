@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 agent_runner.py — Unified LLM/agent caller for AutoResearchClaw v2.6 "Agent Mode"
 

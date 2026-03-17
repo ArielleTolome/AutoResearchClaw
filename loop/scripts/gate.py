@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 gate.py — Discord-based challenger approval gate.
 

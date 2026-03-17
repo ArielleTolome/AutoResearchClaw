@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 meta_ad_library.py — Meta Ad Library scraper for competitive intelligence.
 Searches the Meta Ad Library API for active ads by vertical keyword,

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 ad_dissect.py — Unicorn Ad Autopsy via Gemini Video Intelligence
 

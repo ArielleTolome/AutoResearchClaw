@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 signals.py — Discord signal card posting for #creative-signals and #competitor-watch.
 

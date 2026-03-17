@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 concept_vault.py — Tracks ad concepts across their lifecycle.
 

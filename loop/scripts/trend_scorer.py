@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 trend_scorer.py — 7-day rolling trend momentum scorer for AutoResearchClaw.
 Queries Qdrant for recent signals, groups by topic, assigns momentum scores,

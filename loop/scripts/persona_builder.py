@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 persona_builder.py — Auto persona builder from audience signals.
 Reads Reddit signals from Qdrant (or Baserow fallback), sends to Claude

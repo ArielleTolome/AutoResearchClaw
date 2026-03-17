@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 news_watcher.py — Continuous news intelligence for AutoResearchClaw
 Watches Google News RSS for leadgen verticals + major players,

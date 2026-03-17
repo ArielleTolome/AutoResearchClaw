@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 generate.py — Write a new challenger creative using:
   - The current winner (new baseline)

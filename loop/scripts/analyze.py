@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 analyze.py — Compare baseline vs. challenger performance. Pick winner. Log learnings.
 

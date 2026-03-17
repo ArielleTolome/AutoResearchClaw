@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 competitor_watcher.py — Competitor ad intelligence for AutoResearchClaw
 Searches Facebook Ads Library for active leadgen ads, scores with Codex CLI,

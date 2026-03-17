@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 harvest.py — Pull Meta ad performance data for all active ads in the current test.
 

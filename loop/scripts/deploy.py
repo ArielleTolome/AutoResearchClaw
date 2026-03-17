@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 deploy.py — Create new challenger ad on Meta + pause losers.
 

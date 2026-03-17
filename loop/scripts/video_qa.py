@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 video_qa.py — Gemini QA Gate for Video Creatives
 

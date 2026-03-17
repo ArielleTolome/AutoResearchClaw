@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 baserow_sink.py — Write AutoResearchClaw outputs to Baserow.
 
