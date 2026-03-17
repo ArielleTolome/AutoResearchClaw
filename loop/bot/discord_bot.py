@@ -98,11 +98,11 @@ async def _kimi(system: str, user: str, max_tokens: int = 2000) -> str:
     try:
         result = await asyncio.wait_for(
             loop.run_in_executor(None, lambda: _ar_run(system, user, max_tokens=max_tokens, config=CFG)),
-            timeout=120,
+            timeout=300,
         )
         return result if result.strip() else "⚠️ Model returned empty response. Try again."
     except asyncio.TimeoutError:
-        return "⚠️ LLM request timed out after 120s. Try a shorter topic."
+        return "⚠️ LLM request timed out after 300s. Try a shorter topic."
     except Exception as e:
         log.error(f"_kimi error: {e}")
         return f"⚠️ LLM error: {str(e)[:200]}"
@@ -453,18 +453,19 @@ async def research(interaction: discord.Interaction, topic: str, platform: str =
         )
 
         synthesis = await _kimi(
-            system="You are an ad creative strategist. Synthesize research into a structured intelligence report.",
+            system="You are an ad creative strategist. Be concise. Synthesize research into a structured intelligence report.",
             user=(
                 f"Topic: {topic}\nPlatform: {platform}\n\n"
-                f"Reddit:\n{reddit_out[-1000:]}\n\n"
-                f"News:\n{news_out[-1000:]}\n\n"
-                f"Competitors:\n{competitor_out[-1000:]}\n\n"
-                "Deliver:\n"
+                f"Reddit:\n{reddit_out[-600:]}\n\n"
+                f"News:\n{news_out[-600:]}\n\n"
+                f"Competitors:\n{competitor_out[-600:]}\n\n"
+                "Deliver (bullet points, be brief):\n"
                 "1. Top 3 audience pain points with verbatim quotes\n"
                 "2. Top 3 angles to test\n"
                 "3. Awareness stage\n"
                 "4. Key hook opportunities"
             ),
+            max_tokens=1000,
         )
 
         # Save to Notion
