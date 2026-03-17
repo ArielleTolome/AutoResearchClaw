@@ -1,5 +1,107 @@
 # AutoResearchClaw Changelog
 
+## [2.7.0] — 2026-03-17
+
+### 🔧 Stability — Python 3.9 Compat + MiniMax Think-Block Fix
+
+#### Bug fixes
+- **MiniMax `<think>` block stripping** — `_safe_json_loads` now strips `<think>…</think>` prefixes, markdown fences, and uses regex fallback extraction. Fixes Stage 4 silently producing 0 candidates on every run when using MiniMax M2.5
+- **Python 3.9 type union syntax** — Added `from __future__ import annotations` to all 22 `loop/scripts/` files. `str | None`, `dict | None`, `list[X] | None` are 3.10+ syntax; without this every creative command (`/research`, `/full-brief`, `/gen-hooks`, `/score`, etc.) crashed on import
+- **DOD checker false failures** — Empty directories and `.jsonl` files no longer cause pipeline abort; graceful fallbacks for stages with 0 candidates
+- **FB Ads Library API 400** — `ad_reached_countries` now properly JSON-encoded (`["US"]` not `['US']`)
+
+#### Commands status: 35 slash commands, all importable on Python 3.9+
+
+---
+
+## [2.6.0] — 2026-03-16
+
+### 🤖 Agent Mode — Multi-Provider LLM Support
+
+#### New providers in `action_handler.py` + `_kimi()` helper
+- **Codex CLI** — `provider: codex` routes LLM calls through the local Codex CLI
+- **Claude Code** — `provider: claude-code` routes through `claude --print` (bypass permissions mode)
+- **OpenAI** — `provider: openai` with standard API key config
+- **MiniMax** (default) — unchanged, Anthropic-compat endpoint
+- `/provider` command — show current LLM provider and model config
+- Timeout bumped to 300s for slow providers (Codex, Claude Code)
+- `/research` prompt trimmed to prevent timeout on large topics
+
+---
+
+## [2.5.1] — 2026-03-16
+
+### 📎 Discord File Attachment Support
+
+- `/ad-dissect`, `/video-qa`, `/competitor-spy` — accept Discord file attachments (video/image) directly instead of requiring a URL
+- Downloads attachment to temp file, passes to Gemini for analysis
+- Cleaned up after analysis completes
+
+---
+
+## [2.5.0] — 2026-03-16
+
+### 🎬 Gemini Video Intelligence
+
+#### New scripts
+- `loop/scripts/ad_dissect.py` — dissect any ad video with Gemini: hook type, body structure, CTA, persona, production quality, ACA framework breakdown
+- `loop/scripts/video_qa.py` — pre-launch QA on video creatives: clarity, hook strength, CTA legibility, brand safety
+- `loop/scripts/competitor_video_spy.py` — spy on competitor video ads: angle detection, hook patterns, format analysis
+
+#### New bot commands
+- `/ad-dissect [url] [attachment]` — full ACA block dissection of any video ad
+- `/video-qa [url] [attachment]` — Gemini QA checklist before launch
+- `/competitor-spy [url] [keyword]` — competitor video analysis + angle gap report
+
+---
+
+## [2.4.0] — 2026-03-16
+
+### 🔄 Variation Commands — 8 New Iteration Tools
+
+#### New bot commands (all powered by `_kimi()`)
+- `/spin [concept]` — 8 distinct variations of one ad block (hook/body/CTA swaps)
+- `/remix [concept_a] [concept_b]` — combine best elements of two concepts into 3 hybrids
+- `/awareness-shift [concept] [stage]` — rewrite for a different Schwartz awareness stage (1–5)
+- `/format-adapt [concept] [format]` — adapt brief for specific format (UGC/static/VSL/carousel)
+- `/persona-swap [concept] [persona]` — rewrite angle for a specific persona
+- `/angle-matrix [offer]` — map offer across all 10 ACA angles with hook starters
+- `/hook-ladder [hook]` — rewrite one hook across all 17 ACA execution types
+- `/fatigue-check [concept]` — evaluate creative fatigue signals + pattern interrupt suggestions
+
+#### Fixes
+- `/gen-hooks` embed now shows hook types and scores (was truncated)
+- Notion hook titles and scores now render correctly (no raw markdown leaking)
+- Provider label in embed footer is dynamic (shows actual model, not hardcoded)
+
+---
+
+## [2.3.0] — 2026-03-16
+
+### 📊 The Batch Machine + ACA Creative Testing Tracker
+
+#### New: `loop/scripts/concept_vault.py`
+- Concept lifecycle: `testing → proven → scaling → dead`
+- Tracks batch count, best hook rate, winning hook types per concept
+- JSON store at `loop/learnings/concept_vault.json`
+
+#### New: `loop/scripts/batch_generator.py`
+- Generates 15/45/90/180-ad variation batches
+- Combinations: hooks × actors × music × scenes
+- 80/20 iteration rule enforced (80% proven iterations, 20% new concepts)
+
+#### New: `loop/scripts/creative_tracker.py`
+- Full Baserow table 819 interface — exact replica of ACA Creative Testing Tracker Excel
+- Columns: Test Status, Asset Type, Concept ID, Hook, Ad Type, Hypothesis, Action Items, Results, ROAS, CPA, CVR, CTR, Hook Rate, Hold Rate, Avg Watch Time
+- Seeded with ACA template examples + Stimulus Assistance concepts
+
+#### New bot commands
+- `/batch [concept_id] [size]` — generate ad variation batch (15/45/90/180)
+- `/concept-status` — show concept vault (testing/proven/scaling/dead)
+- `/tracker [status] [offer]` — view and manage creative testing tracker
+
+---
+
 ## [2.2.0] — 2026-03-15
 
 ### 🚀 Discord Bot — 8 New Slash Commands
