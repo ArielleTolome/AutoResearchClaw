@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 import urllib.error
@@ -262,46 +263,88 @@ def fetch_reddit(topic: str, *, limit: int = 10) -> list[dict[str, Any]]:
 # Source: Facebook Ad Library (public search, no auth)
 # ---------------------------------------------------------------------------
 
+_FB_ACCESS_TOKEN = (
+    "EAAkLZBkudbJsBQypE8lgS2Cr5HWYacXqbpJB1ODj9MQ7xKRzJD1FXbvFGN9qBcHYTCt42ZCiTvtOpuHlZByhK6ZBUxukyzZCp4vv5AdATWqlKp07BsYyzAVj5AmifmI7Wz10sK7FfTAl8BRhpeaqzn2ODuZChwUI9ZAGRpkPuRvKbuwatpMKyF27gL9XpQ0SPTP0usuZBoTgPAudaxiv32xpTSnl1SEIQLfvxXg4J344rMIySbzGCYE3"
+)
+
+
 def fetch_facebook_ad_library(topic: str, *, limit: int = 15) -> list[dict[str, Any]]:
     """
-    Fetch public competitor ads from Facebook Ad Library via DuckDuckGo search.
-
-    The FB Ad Library has a public web interface but no unauthenticated API.
-    We proxy through DuckDuckGo HTML search to find ad library pages and
-    relevant competitor analysis resources.
+    Fetch competitor ads from the Facebook Ad Library API (authenticated).
+    Falls back to DuckDuckGo proxy if the API token is unavailable.
     """
     results: list[dict[str, Any]] = []
+    token = os.environ.get("FB_ACCESS_TOKEN", _FB_ACCESS_TOKEN)
 
+    # ── Primary: official FB Ad Library API ───────────────────────────────
+    if token:
+        try:
+            # Extract short keyword from topic for search
+            keyword = " ".join(topic.split()[:6])
+            api_url = (
+                "https://graph.facebook.com/v21.0/ads_archive"
+                f"?access_token={token}"
+                f"&search_terms={urllib.parse.quote(keyword)}"
+                "&ad_reached_countries=['US']"
+                "&ad_active_status=ALL"
+                "&fields=id,ad_creative_bodies,ad_creative_link_captions,"
+                "ad_creative_link_descriptions,ad_creative_link_titles,"
+                "page_name,ad_delivery_start_time,ad_delivery_stop_time"
+                f"&limit={min(limit, 25)}"
+            )
+            raw = _http_get(api_url, timeout=15)
+            data = json.loads(raw)
+            ads = data.get("data", [])
+            for i, ad in enumerate(ads[:limit]):
+                bodies = ad.get("ad_creative_bodies") or []
+                titles = ad.get("ad_creative_link_titles") or []
+                descs = ad.get("ad_creative_link_descriptions") or []
+                captions = ad.get("ad_creative_link_captions") or []
+                text = " | ".join(filter(None, bodies + titles + descs + captions))
+                if not text:
+                    continue
+                results.append({
+                    "id": f"fb-api-{i}",
+                    "title": titles[0] if titles else f"FB Ad — {ad.get('page_name', topic)}",
+                    "source": "Facebook Ad Library API",
+                    "source_type": "ad_creative",
+                    "url": f"https://www.facebook.com/ads/library/?id={ad.get('id', '')}",
+                    "year": 2025,
+                    "abstract": text[:1000],
+                    "page_name": ad.get("page_name", ""),
+                    "awareness_stage": "product_aware_or_solution_aware",
+                    "emotional_driver": "inferred",
+                    "collected_at": _utcnow_iso(),
+                })
+            logger.info("FB Ad Library API %r → %d ads", keyword, len(results))
+            if results:
+                return results
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("FB Ad Library API failed (%s) — falling back to DDG proxy", exc)
+
+    # ── Fallback: DuckDuckGo proxy ─────────────────────────────────────────
     queries = [
-        f'site:facebook.com/ads/library "{topic}"',
-        f'"{topic}" ad facebook ads library',
         f'"{topic}" facebook ad hooks examples',
         f'"{topic}" competitor ads creative analysis',
     ]
-
-    for i, query in enumerate(queries[:3]):
+    for i, query in enumerate(queries):
         if i > 0:
             time.sleep(1.0)
         try:
             encoded = urllib.parse.quote(query)
             url = f"https://html.duckduckgo.com/html/?q={encoded}"
             raw = _http_get(url)
-
-            # Extract result snippets from DDG HTML
-            # DDG results have class "result__snippet"
             snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', raw, re.DOTALL)
             titles_raw = re.findall(r'class="result__title"[^>]*>.*?<a[^>]*>(.*?)</a>', raw, re.DOTALL)
-            titles = [re.sub(r"<[^>]+>", "", t).strip() for t in titles_raw]
-
+            titles_clean = [re.sub(r"<[^>]+>", "", t).strip() for t in titles_raw]
             for j, snippet in enumerate(snippets[:4]):
                 clean = re.sub(r"<[^>]+>", "", snippet).strip()
                 if len(clean) < 30:
                     continue
-                title = titles[j] if j < len(titles) else f"Competitor ad creative — {topic}"
                 results.append({
-                    "id": f"fb-ad-{i}-{j}",
-                    "title": title,
-                    "source": "Facebook Ad Library (via web search)",
+                    "id": f"fb-ddg-{i}-{j}",
+                    "title": titles_clean[j] if j < len(titles_clean) else f"Competitor ad — {topic}",
+                    "source": "Facebook Ad Library (via DDG proxy)",
                     "source_type": "ad_creative",
                     "url": f"https://www.facebook.com/ads/library/?q={urllib.parse.quote(topic)}",
                     "year": 2024,
@@ -310,9 +353,8 @@ def fetch_facebook_ad_library(topic: str, *, limit: int = 15) -> list[dict[str, 
                     "emotional_driver": "inferred",
                     "collected_at": _utcnow_iso(),
                 })
-            logger.info("FB Ad Library search %r → %d results", query, len(snippets))
         except Exception as exc:  # noqa: BLE001
-            logger.debug("FB Ad Library fetch failed for %r: %s", query, exc)
+            logger.debug("FB DDG proxy failed for %r: %s", query, exc)
 
     return results
 

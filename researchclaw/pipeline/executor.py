@@ -6197,7 +6197,9 @@ def execute_stage(
                     break
             else:
                 path = stage_dir / output_file
-                if not path.exists() or path.stat().st_size == 0:
+                # candidates.jsonl is allowed to be empty in ads mode (graceful fallback)
+                allow_empty = output_file == "candidates.jsonl"
+                if not path.exists() or (path.stat().st_size == 0 and not allow_empty):
                     result = StageResult(
                         stage=stage,
                         status=StageStatus.FAILED,

@@ -8,7 +8,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from collections.abc import Mapping
-from typing import cast
+from typing import cast, Optional
 
 from researchclaw.adapters import AdapterBundle
 from researchclaw.config import RCConfig
@@ -23,9 +23,9 @@ def _generate_run_id(topic: str) -> str:
 
 def cmd_run(args: argparse.Namespace) -> int:
     config_path = Path(cast(str, args.config))
-    topic = cast(str | None, args.topic)
-    output = cast(str | None, args.output)
-    from_stage_name = cast(str | None, args.from_stage)
+    topic = cast(Optional[str], args.topic)
+    output = cast(Optional[str], args.output)
+    from_stage_name = cast(Optional[str], args.from_stage)
     auto_approve = cast(bool, args.auto_approve)
     skip_preflight = cast(bool, args.skip_preflight)
     resume = cast(bool, args.resume)
@@ -143,7 +143,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     config_path = Path(cast(str, args.config))
-    output = cast(str | None, args.output)
+    output = cast(Optional[str], args.output)
 
     report = run_doctor(config_path)
     print_doctor_report(report)
@@ -155,7 +155,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     from researchclaw.report import generate_report, write_report
 
     run_dir = Path(cast(str, args.run_dir))
-    output = cast(str | None, args.output)
+    output = cast(Optional[str], args.output)
 
     try:
         report = generate_report(run_dir)
@@ -219,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     _ = rpt_p.add_argument("--output", "-o", help="Write report to file")
     args = parser.parse_args(argv)
 
-    command = cast(str | None, args.command)
+    command = cast(Optional[str], args.command)
 
     if command == "run":
         return cmd_run(args)

@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import ContextManager, cast
+from typing import ContextManager, cast, Optional
 
 import yaml
 
@@ -439,8 +439,7 @@ def _check_models_against_endpoint(
         return None
 
     models_obj = payload.get("data")
-    endpoint_models = cast(
-        list[object] | None, models_obj if isinstance(models_obj, list) else None
+    endpoint_models = cast(Optional[list[object]], models_obj if isinstance(models_obj, list) else None
     )
     if not isinstance(endpoint_models, list):
         return None
