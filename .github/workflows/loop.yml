@@ -37,14 +37,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests anthropic pyyaml
+          pip install -r loop/requirements.txt
 
       - name: Write config from secrets
         run: |
-          cat > auto_research_claw/config/config.yaml << 'EOF'
+          mkdir -p loop/config
+          cat > loop/config/config.yaml << 'EOF'
           meta:
             access_token: "${{ secrets.META_ACCESS_TOKEN }}"
             ad_account_id: "${{ secrets.META_AD_ACCOUNT_ID }}"
+            app_id: "${{ secrets.META_APP_ID }}"
+            app_secret: "${{ secrets.META_APP_SECRET }}"
             page_id: "${{ secrets.META_PAGE_ID }}"
 
           llm:
@@ -79,16 +82,25 @@ jobs:
           EOF
 
       - name: Run AutoResearchClaw
-        working-directory: auto_research_claw
+        working-directory: loop
         run: |
           STEP_ARG=""
           if [ "${{ inputs.step }}" != "" ]; then
             STEP_ARG="--step ${{ inputs.step }}"
           fi
 
-          DRY_RUN=""
-          if [ "${{ inputs.dry_run }}" == "true" ]; then
-            DRY_RUN="--dry-run"
+          # Scheduled runs stay dry: they prove the pipeline is wired without
+          # touching Meta. Live cycles are dispatched from the Actions tab,
+          # which is the human approval step before spend.
+          MODE="dry"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
+            MODE="live"
+          fi
+          echo "MODE=$MODE" >> "$GITHUB_ENV"
+
+          DRY_RUN="--dry-run"
+          if [ "$MODE" == "live" ]; then
+            DRY_RUN=""
           fi
 
           python orchestrator/orchestrator.py \
@@ -99,11 +111,13 @@ jobs:
             --link-url "${{ secrets.OFFER_LINK_URL }}"
 
       - name: Commit learnings
+        # Only live cycles produce learnings worth keeping; dry runs emit mock briefs.
+        if: ${{ always() && env.MODE == 'live' }}
         run: |
           git config --local user.email "autoResearchClaw@github-actions"
           git config --local user.name "AutoResearchClaw"
-          git add auto_research_claw/learnings/
+          git add loop/learnings/
           git diff --staged --quiet || git commit -m "chore: AutoResearchClaw cycle $(date +%Y-%m-%d_%H%M)"
-          git push
+          git pull --rebase origin main && git push || echo "::warning::could not push learnings"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
