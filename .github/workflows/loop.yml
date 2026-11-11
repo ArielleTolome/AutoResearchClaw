@@ -156,8 +156,10 @@ jobs:
 
       - name: Commit learnings
         # Only live cycles produce learnings worth keeping; a dry run emits
-        # mock briefs that would poison the next real cycle.
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.dry_run != 'true' }}
+        # mock briefs that would poison the next real cycle. dry_run is a
+        # boolean input, so compare it to false - comparing it to the string
+        # 'true' is always true and let dry runs commit mock learnings.
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.dry_run == false }}
         run: |
           mkdir -p loop/learnings
           git config --local user.email "autoResearchClaw@github-actions"
