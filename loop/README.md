@@ -13,6 +13,12 @@ HARVEST → ANALYZE → GENERATE → DEPLOY → wait 24-48h → repeat
 3. **Generate** — Write new challenger using learnings + creative frameworks
 4. **Deploy** — Create challenger on Meta, pause losers, ping Slack
 
+The Deploy step reads the challenger's brief — the same labelled format the
+generator writes: `CHALLENGER NAME`, `HYPOTHESIS`, `ANGLE`, `HOOK TYPE`,
+`AWARENESS STAGE`, plus the `--- HOOK / BODY / CTA ---` blocks. The ad name is
+built from the challenger name, so a brief that does not parse fails the cycle
+instead of shipping a malformed ad.
+
 ## Quick Start
 
 ```bash
@@ -40,9 +46,16 @@ python orchestrator/orchestrator.py --step deploy --adset-id act_XXX
 ## Scheduling
 
 See `.github/workflows/loop.yml` — runs via GitHub Actions cron every 48h.
-Add secrets: META_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_ADSET_ID, META_PAGE_ID,
-META_IMAGE_HASH, OFFER_LINK_URL, ANTHROPIC_API_KEY, OFFER_NAME, OFFER_NICHE,
-TARGET_CPA, SLACK_WEBHOOK_URL
+Add secrets: META_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_APP_ID, META_APP_SECRET,
+META_ADSET_ID, META_PAGE_ID, META_IMAGE_HASH, OFFER_LINK_URL, ANTHROPIC_API_KEY,
+OFFER_NAME, OFFER_NICHE, TARGET_CPA, SLACK_WEBHOOK_URL
+
+## Checks
+
+`python scripts/test_deploy_parser.py` — parses a fixture brief and asserts the
+ad name and copy blocks come out clean. It runs on every cycle in CI
+(`.github/workflows/loop.yml`), before the cycle itself: a parser regression
+fails the run instead of shipping a broken ad.
 
 ## Metrics
 
