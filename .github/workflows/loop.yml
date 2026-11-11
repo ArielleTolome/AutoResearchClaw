@@ -44,6 +44,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r loop/requirements.txt
 
+      - name: Parser regression check
+        # The challenger brief is parsed by deploy.py before anything is
+        # published to Meta. A parser that silently returns empty/garbled
+        # fields would ship a broken ad, so it is gated here.
+        working-directory: loop
+        run: python scripts/test_deploy_parser.py
+
       - name: Write config from secrets
         # loop/config/config.yaml.example is the single source of truth for the
         # loop's config schema. Copy it, then inject only the secrets, so CI
