@@ -14,6 +14,7 @@ This script:
 
 import json
 import re
+import textwrap
 import yaml
 import requests
 from pathlib import Path
@@ -30,22 +31,40 @@ def load_config():
 
 
 def parse_challenger_brief(brief: str) -> dict:
-    """Extract structured fields from the challenger markdown."""
+    """Extract structured fields from the challenger markdown.
+
+    Single-line header fields must NOT be matched with DOTALL: `(.+)` would
+    run past the newline and swallow the rest of the brief (the ad name then
+    became the whole document). Body copy is matched per section instead.
+    """
     def extract(pattern, text, default=""):
-        m = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+        m = re.search(pattern, text, re.IGNORECASE)
         return m.group(1).strip() if m else default
 
+    def section(label, text, default=""):
+        """Content between '--- LABEL ---' and the next '---' marker."""
+        m = re.search(
+            rf"--- {label} ---\s*\n(.*?)\n\s*---",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not m:
+            return default
+        return textwrap.dedent(m.group(1)).strip()
+
     return {
-        "name": extract(r"CHALLENGER NAME:\s*(.+)", brief),
-        "hypothesis": extract(r"HYPOTHESIS:\s*(.+)", brief),
-        "angle": extract(r"ANGLE:\s*(.+)", brief),
-        "hook_type": extract(r"HOOK TYPE:\s*(.+)", brief),
-        "awareness_stage": extract(r"AWARENESS STAGE:\s*(.+)", brief),
-        "hook": extract(r"--- HOOK ---\n(.+?)---", brief),
-        "body": extract(r"--- BODY ---\n(.+?)---", brief),
-        "cta": extract(r"--- CTA ---\n(.+?)---", brief),
-        "format_type": extract(r"Type:\s*(.+)", brief),
-        "rationale": extract(r"--- STRATEGIC RATIONALE ---\n(.+?)$", brief),
+        "name": extract(r"CHALLENGER NAME:\s*([^\n]+)", brief),
+        "hypothesis": extract(r"HYPOTHESIS:\s*([^\n]+)", brief),
+        "angle": extract(r"ANGLE:\s*([^\n]+)", brief),
+        "hook_type": extract(r"HOOK TYPE:\s*([^\n]+)", brief),
+        "awareness_stage": extract(r"AWARENESS STAGE:\s*([^\n]+)", brief),
+        "hook": section("HOOK", brief),
+        "body": section("BODY", brief),
+        "cta": section("CTA", brief),
+        "format_type": extract(r"Type:\s*([^\n]+)", section("FORMAT", brief)),
+        "rationale": textwrap.dedent(
+            extract(r"--- STRATEGIC RATIONALE ---\s*\n([\s\S]+)", brief)
+        ),
     }
 
 
@@ -171,6 +190,14 @@ def deploy(challenger_brief: str, kill_list: list[str],
     cycle = get_cycle_number()
 
     parsed = parse_challenger_brief(challenger_brief)
+
+    missing = [k for k in ("name", "hook", "body", "cta") if not parsed.get(k)]
+    if missing:
+        raise ValueError(
+            f"challenger brief is missing required field(s): {', '.join(missing)} "
+            f"— refusing to deploy an empty/partial ad"
+        )
+
     ad_name = f"ARC_CHALLENGER_{parsed['name']}_C{cycle:03d}"
     ad_text = compose_ad_text(parsed)
     headline = parsed["hook"][:60] if parsed["hook"] else "See if you're overpaying"
