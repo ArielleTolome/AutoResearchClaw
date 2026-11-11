@@ -44,12 +44,87 @@ jobs:
       - name: Install dependencies
         run: pip install -r loop/requirements.txt
 
+      - name: Repair angle-fatigue intel loader
+        # One-shot repair. load_intel_from_baserow() imported a BaserowClient
+        # class that baserow_sink never exported, so every cycle logged
+        # "Baserow load failed" and fell back to local files. Rewrite the
+        # function to use baserow_sink.read_intel_ads(), verify it, then
+        # commit. Idempotent: skips when the reader is already in use.
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path("loop/scripts/angle_fatigue.py")
+          src = path.read_text()
+
+          if "read_intel_ads" in src:
+              print("angle-fatigue loader already uses read_intel_ads")
+              raise SystemExit(0)
+
+          match = re.search(r"def load_intel_from_baserow\(.*?(?=\ndef |\Z)", src, re.S)
+          if not match:
+              raise SystemExit("could not find load_intel_from_baserow()")
+          old = match.group(0)
+
+          fallback = re.search(r"return\s+(\w+)\(", old)
+          if not fallback:
+              raise SystemExit("could not find the local fallback call")
+          fallback_name = fallback.group(1)
+
+          NEW = '''def load_intel_from_baserow(config: dict, niche: str = "") -> list[dict]:
+              """
+              Load intel ads for fatigue analysis.
+
+              Baserow is the memory layer, but a read only helps when the rows
+              carry the advertiser field the diversity score needs -
+              read_intel_ads() returns nothing otherwise. Either way we fall
+              back to the local harvest files, which carry that field.
+              """
+              if config.get("baserow", {}).get("enabled"):
+                  try:
+                      from baserow_sink import read_intel_ads
+                      rows = read_intel_ads(config, niche)
+                  except Exception as e:
+                      print(f"[FATIGUE] Baserow load failed ({e}), falling back to local files")
+                      rows = []
+                  if rows:
+                      return rows
+              return __FALLBACK__(niche)
+          '''
+
+          new = NEW.replace("__FALLBACK__", fallback_name)
+          path.write_text(src[: match.start()] + new + src[match.end() :])
+          print("rewrote load_intel_from_baserow; local fallback:", fallback_name)
+          PY
+          python -c "import ast,pathlib; ast.parse(pathlib.Path('loop/scripts/angle_fatigue.py').read_text()); print('angle_fatigue.py parses')"
+          (cd loop && python scripts/test_angle_fatigue_loader.py)
+          git config --local user.email "autoResearchClaw@github-actions"
+          git config --local user.name "AutoResearchClaw"
+          git add loop/scripts/angle_fatigue.py
+          if git diff --staged --quiet; then
+            echo "nothing to repair"
+          else
+            git commit -m "fix(loop): load intel_ads through baserow_sink.read_intel_ads"
+            git pull --rebase origin main
+            git push
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Parser regression check
         # The challenger brief is parsed by deploy.py before anything is
         # published to Meta. A parser that silently returns empty/garbled
         # fields would ship a broken ad, so it is gated here.
         working-directory: loop
         run: python scripts/test_deploy_parser.py
+
+      - name: Angle-fatigue loader check
+        # The fatigue scorer reads intel_ads through baserow_sink. A loader
+        # whose reader cannot be imported falls back to local files silently,
+        # so the dead import path is gated here.
+        working-directory: loop
+        run: python scripts/test_angle_fatigue_loader.py
 
       - name: Write config from secrets
         # loop/config/config.yaml.example is the single source of truth for the
