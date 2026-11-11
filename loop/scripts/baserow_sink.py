@@ -2,7 +2,7 @@ from __future__ import annotations
 """
 baserow_sink.py — Write AutoResearchClaw outputs to Baserow.
 
-Handles authentication, row creation, and graceful degradation.
+Handles authentication, row creation, row reads, and graceful degradation.
 All writes are best-effort — failures log a warning and never crash the pipeline.
 
 Table IDs (AutoResearchClaw database, id=214):
@@ -247,3 +247,60 @@ def write_loop_result(
     except Exception as e:
         print(f"[BASEROW] Loop result write error: {e}")
     return None
+
+
+def read_intel_ads(config: dict, niche: str = "", limit: int = 200) -> list[dict]:
+    """
+    Read intel_ads rows from Baserow.
+
+    Returns [] when Baserow is disabled, unauthenticated, unreachable, or when
+    the rows carry no advertiser field — the fatigue scorer's diversity score
+    needs one advertiser per ad, and without it the scorer would read every
+    angle as fresh. Callers fall back to the local harvest files.
+    """
+    br = config.get("baserow", {})
+    if not br.get("enabled"):
+        return []
+
+    jwt = _get_jwt(config)
+    if not jwt:
+        return []
+
+    params = {
+        "size": limit,
+        "order_by": "-days_running",
+        "user_field_names": "true",
+    }
+    if niche:
+        params["filter__topic__contains"] = niche.replace("_", " ")
+
+    try:
+        r = requests.get(
+            f"{_BASE}/api/database/rows/table/{TABLE_IDS['intel_ads']}/",
+            headers={"Authorization": f"JWT {jwt}", "Content-Type": "application/json"},
+            params=params,
+            timeout=10,
+        )
+        if r.status_code != 200:
+            print(f"[BASEROW] Read failed ({r.status_code})")
+            return []
+        rows = r.json().get("results", [])
+    except Exception as e:
+        print(f"[BASEROW] Read error: {e}")
+        return []
+
+    if not rows:
+        return []
+
+    advertiser_keys = ("advertiser", "page_name", "brand_name")
+    has_advertiser = any(
+        str(row.get(k) or "").strip()
+        for row in rows
+        for k in advertiser_keys
+    )
+    if not has_advertiser:
+        print("[BASEROW] intel_ads rows carry no advertiser field — fatigue diversity needs it; using local harvest files")
+        return []
+
+    print(f"[BASEROW] Read {len(rows)} intel_ads rows")
+    return rows
