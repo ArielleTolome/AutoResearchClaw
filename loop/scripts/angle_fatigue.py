@@ -248,42 +248,23 @@ def load_intel_for_niche(niche: str = "") -> list[dict]:
 
 def load_intel_from_baserow(config: dict, niche: str = "") -> list[dict]:
     """
-    Load intel_ads from Baserow for fatigue analysis.
-    Falls back to local JSON files if Baserow unavailable.
+    Load intel ads for fatigue analysis.
+
+    Baserow is the memory layer, but a read only helps when the rows
+    carry the advertiser field the diversity score needs -
+    read_intel_ads() returns nothing otherwise. Either way we fall
+    back to the local harvest files, which carry that field.
     """
-    try:
-        from baserow_sink import BaserowClient
-        br_cfg = config.get("baserow", {})
-        if not br_cfg.get("enabled"):
-            return load_intel_for_niche(niche)
-
-        client = BaserowClient(
-            base_url=br_cfg["base_url"],
-            email=br_cfg["email"],
-            password=br_cfg["password"],
-        )
-        client.authenticate()
-
-        table_id = br_cfg.get("table_intel_ads_id", 813)
-        params = {"size": 200, "order_by": "-days_running"}
-        if niche:
-            params["filter__topic__contains"] = niche.replace("_", " ")
-
-        r = client.session.get(
-            f"{client.base_url}/api/database/rows/table/{table_id}/",
-            headers=client._auth_headers(),
-            params=params,
-            timeout=10,
-        )
-        if r.status_code == 200:
-            rows = r.json().get("results", [])
-            print(f"[FATIGUE] Loaded {len(rows)} intel ads from Baserow")
+    if config.get("baserow", {}).get("enabled"):
+        try:
+            from baserow_sink import read_intel_ads
+            rows = read_intel_ads(config, niche)
+        except Exception as e:
+            print(f"[FATIGUE] Baserow load failed ({e}), falling back to local files")
+            rows = []
+        if rows:
             return rows
-    except Exception as e:
-        print(f"[FATIGUE] Baserow load failed ({e}), falling back to local files")
-
     return load_intel_for_niche(niche)
-
 
 def _score_to_tier(score: float) -> str:
     if score < 25:
