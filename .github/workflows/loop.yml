@@ -2,29 +2,35 @@ name: AutoResearchClaw Loop
 
 on:
   schedule:
-    # Runs every 48 hours at 9 AM UTC
+    # Every 48 hours at 09:00 UTC. Scheduled runs are always dry: they prove
+    # the pipeline is wired without touching Meta.
     - cron: '0 9 */2 * *'
-  workflow_dispatch:  # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run (no API calls)'
+        description: 'Dry run (no Meta API calls, no spend). Uncheck for a live cycle.'
         required: false
-        default: 'false'
+        default: 'true'
         type: boolean
       step:
-        description: 'Run single step only (leave empty for full loop)'
+        description: 'Run a single step only (full = whole loop)'
         required: false
+        default: 'full'
         type: choice
         options:
-          - ''
+          - full
           - harvest
           - analyze
           - generate
           - deploy
 
+permissions:
+  contents: write
+
 jobs:
   run-loop:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -36,88 +42,132 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install -r loop/requirements.txt
+        run: pip install -r loop/requirements.txt
 
       - name: Write config from secrets
+        # loop/config/config.yaml.example is the single source of truth for the
+        # loop's config schema. Copy it, then inject only the secrets, so CI
+        # can never drift from the local schema.
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          OFFER_NAME: ${{ secrets.OFFER_NAME }}
+          OFFER_NICHE: ${{ secrets.OFFER_NICHE }}
+          TARGET_CPA: ${{ secrets.TARGET_CPA }}
         run: |
           mkdir -p loop/config
-          cat > loop/config/config.yaml << 'EOF'
-          meta:
-            access_token: "${{ secrets.META_ACCESS_TOKEN }}"
-            ad_account_id: "${{ secrets.META_AD_ACCOUNT_ID }}"
-            app_id: "${{ secrets.META_APP_ID }}"
-            app_secret: "${{ secrets.META_APP_SECRET }}"
-            page_id: "${{ secrets.META_PAGE_ID }}"
+          python - <<'PY'
+          import os
+          import pathlib
+          import yaml
 
-          llm:
-            provider: anthropic
-            model: claude-opus-4-6
-            api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
+          src = pathlib.Path("loop/config/config.yaml.example")
+          dst = pathlib.Path("loop/config/config.yaml")
+          cfg = yaml.safe_load(src.read_text())
 
-          loop:
-            frequency_hours: 48
-            min_spend_threshold: 20.0
-            min_impressions: 500
-            evaluation_window_days: 2
+          env = {k: os.environ.get(k, "").strip() for k in os.environ}
 
-          kill_rules:
-            hook_rate_min: 0.15
-            ctr_min: 0.005
-            cpa_max_multiplier: 3.0
 
-          offer:
-            name: "${{ secrets.OFFER_NAME }}"
-            target_cpa: ${{ secrets.TARGET_CPA || 50 }}
-            target_roas: 2.0
-            awareness_stage: 3
-            niche: "${{ secrets.OFFER_NICHE }}"
-            platform: meta
+          def substitute(node):
+              """Replace ${SECRET} placeholders with the secret's value."""
+              if isinstance(node, dict):
+                  return {k: substitute(v) for k, v in node.items()}
+              if isinstance(node, list):
+                  return [substitute(v) for v in node]
+              if isinstance(node, str):
+                  for name, value in env.items():
+                      token = "${" + name + "}"
+                      if value and token in node:
+                          node = node.replace(token, value)
+              return node
 
-          notifications:
-            slack_webhook: "${{ secrets.SLACK_WEBHOOK_URL }}"
-            notify_on: [harvest, winner, deploy, kill]
 
-          frameworks_path: "../creative"
-          EOF
+          cfg = substitute(cfg)
+
+
+          def put(section, key, value):
+              if value:
+                  cfg.setdefault(section, {})[key] = value
+
+
+          put("meta", "access_token", env["META_ACCESS_TOKEN"])
+          put("meta", "ad_account_id", env["META_AD_ACCOUNT_ID"])
+          put("meta", "app_id", env["META_APP_ID"])
+          put("meta", "app_secret", env["META_APP_SECRET"])
+          put("meta", "page_id", env["META_PAGE_ID"])
+          put("notifications", "slack_webhook", env["SLACK_WEBHOOK_URL"])
+          put("offer", "name", env["OFFER_NAME"])
+          put("offer", "niche", env["OFFER_NICHE"])
+          if env["TARGET_CPA"]:
+              cfg.setdefault("offer", {})["target_cpa"] = float(env["TARGET_CPA"])
+
+          # LLM: prefer the Anthropic key, else the MiniMax Anthropic-compatible
+          # endpoint. Model and base_url come as a pair - a claude-* model name
+          # is rejected by the MiniMax endpoint.
+          if env["ANTHROPIC_API_KEY"]:
+              cfg.setdefault("llm", {})["api_key"] = env["ANTHROPIC_API_KEY"]
+          elif env["MINIMAX_API_KEY"]:
+              cfg.setdefault("llm", {}).update({
+                  "api_key": env["MINIMAX_API_KEY"],
+                  "base_url": "https://api.minimax.io/anthropic",
+                  "model": "MiniMax-M2.5-highspeed",
+              })
+
+          dst.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True))
+          print("wrote", dst)
+          PY
+          echo "--- credential status ---"
+          echo "META_ACCESS_TOKEN: $([ -n "$META_ACCESS_TOKEN" ] && echo set || echo MISSING)"
+          echo "META_AD_ACCOUNT_ID: $([ -n "$META_AD_ACCOUNT_ID" ] && echo set || echo MISSING)"
+          echo "LLM key: $([ -n "$ANTHROPIC_API_KEY$MINIMAX_API_KEY" ] && echo set || echo MISSING)"
 
       - name: Run AutoResearchClaw
         working-directory: loop
+        env:
+          META_ADSET_ID: ${{ secrets.META_ADSET_ID }}
+          META_IMAGE_HASH: ${{ secrets.META_IMAGE_HASH }}
+          OFFER_LINK_URL: ${{ secrets.OFFER_LINK_URL }}
         run: |
+          # Scheduled runs stay dry. A live cycle only happens when someone
+          # dispatches the workflow with dry_run unchecked - that click is the
+          # human approval step before any Meta spend.
+          DRY="--dry-run"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
+            DRY=""
+          fi
+
           STEP_ARG=""
-          if [ "${{ inputs.step }}" != "" ]; then
+          if [ -n "${{ inputs.step }}" ] && [ "${{ inputs.step }}" != "full" ]; then
             STEP_ARG="--step ${{ inputs.step }}"
-          fi
-
-          # Scheduled runs stay dry: they prove the pipeline is wired without
-          # touching Meta. Live cycles are dispatched from the Actions tab,
-          # which is the human approval step before spend.
-          MODE="dry"
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
-            MODE="live"
-          fi
-          echo "MODE=$MODE" >> "$GITHUB_ENV"
-
-          DRY_RUN="--dry-run"
-          if [ "$MODE" == "live" ]; then
-            DRY_RUN=""
           fi
 
           python orchestrator/orchestrator.py \
             $STEP_ARG \
-            $DRY_RUN \
-            --adset-id "${{ secrets.META_ADSET_ID }}" \
-            --image-hash "${{ secrets.META_IMAGE_HASH }}" \
-            --link-url "${{ secrets.OFFER_LINK_URL }}"
+            $DRY \
+            --adset-id "$META_ADSET_ID" \
+            --image-hash "$META_IMAGE_HASH" \
+            --link-url "${OFFER_LINK_URL:-https://example.com}"
 
       - name: Commit learnings
-        # Only live cycles produce learnings worth keeping; dry runs emit mock briefs.
-        if: ${{ always() && env.MODE == 'live' }}
+        # Only live cycles produce learnings worth keeping; a dry run emits
+        # mock briefs that would poison the next real cycle.
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.dry_run != 'true' }}
         run: |
+          mkdir -p loop/learnings
           git config --local user.email "autoResearchClaw@github-actions"
           git config --local user.name "AutoResearchClaw"
-          git add loop/learnings/
-          git diff --staged --quiet || git commit -m "chore: AutoResearchClaw cycle $(date +%Y-%m-%d_%H%M)"
-          git pull --rebase origin main && git push || echo "::warning::could not push learnings"
+          git add -A loop/ || true
+          if git diff --staged --quiet; then
+            echo "no learnings to commit"
+          else
+            git commit -m "chore(loop): AutoResearchClaw cycle $(date -u +%Y-%m-%d_%H%M)"
+            git pull --rebase origin main && git push || echo "::warning::could not push learnings"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
