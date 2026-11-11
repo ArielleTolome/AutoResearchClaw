@@ -67,6 +67,7 @@ jobs:
           OFFER_NAME: ${{ secrets.OFFER_NAME }}
           OFFER_NICHE: ${{ secrets.OFFER_NICHE }}
           TARGET_CPA: ${{ secrets.TARGET_CPA }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           mkdir -p loop/config
           python - <<'PY'
@@ -111,6 +112,7 @@ jobs:
           put("notifications", "slack_webhook", env["SLACK_WEBHOOK_URL"])
           put("offer", "name", env["OFFER_NAME"])
           put("offer", "niche", env["OFFER_NICHE"])
+          put("tavily", "api_key", env["TAVILY_API_KEY"])
           if env["TARGET_CPA"]:
               cfg.setdefault("offer", {})["target_cpa"] = float(env["TARGET_CPA"])
 
@@ -133,6 +135,7 @@ jobs:
           echo "META_ACCESS_TOKEN: $([ -n "$META_ACCESS_TOKEN" ] && echo set || echo MISSING)"
           echo "META_AD_ACCOUNT_ID: $([ -n "$META_AD_ACCOUNT_ID" ] && echo set || echo MISSING)"
           echo "LLM key: $([ -n "$ANTHROPIC_API_KEY$MINIMAX_API_KEY" ] && echo set || echo MISSING)"
+          echo "TAVILY_API_KEY: $([ -n "$TAVILY_API_KEY" ] && echo set || echo MISSING)"
 
       - name: Run AutoResearchClaw
         working-directory: loop
