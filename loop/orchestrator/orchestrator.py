@@ -65,7 +65,12 @@ def run_full_loop(dry_run: bool = False, adset_id: str = "", image_hash: str = "
 
     # ── STEP 1: HARVEST ──────────────────────────────────────────────────────
     log("STEP 1: HARVEST")
-    ads = harvest(dry_run=dry_run)
+    try:
+        ads = harvest(dry_run=dry_run)
+    except Exception as e:
+        log(f"Harvest failed (non-fatal): {e}")
+        log("Tip: check meta.access_token + meta.ad_account_id in loop/config/config.yaml")
+        return
 
     if not ads:
         log("No ads with sufficient data. Skipping this cycle.")
